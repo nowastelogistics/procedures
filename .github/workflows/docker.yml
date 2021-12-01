@@ -1,0 +1,201 @@
+name: Docker build
+
+on:
+  workflow_call:
+    inputs:
+      docker_file_path:
+        required: true
+        type: string
+      docker_image_name:
+        required: true
+        type: string
+      docker_has_tests:
+        required: false
+        type: boolean
+        default: false
+      docker_has_code_coverage:
+        required: false
+        type: boolean
+        default: false
+      octo_auto_release_dev:
+        required: false
+        type: boolean
+        default: false
+      octo_auto_release_prod:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      docker_server_url:
+        required: true
+      docker_server_username:
+        required: true
+      docker_server_password:
+        required: true
+      nuget_github_server_url:
+        required: true
+      nuget_github_server_username:
+        required: true
+      nuget_github_server_password:
+        required: true
+      nuget_azure_server_url:
+        required: true
+      nuget_azure_server_username:
+        required: true
+      nuget_azure_server_password:
+        required: true
+      octopus_server_url:
+        required: true
+      octopus_server_apikey:
+        required: true
+        
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v0.9.11
+      with:
+        versionSpec: '5.x'
+
+    - name: Determine Version
+      uses: gittools/actions/gitversion/execute@v0.9.11
+      with:
+        useConfigFile: true
+        configFilePath: GitVersion.yml
+
+    - name: Setup buildx
+      uses: docker/setup-buildx-action@v1.6.0
+      id: buildx
+      with:
+        install: true
+      
+    - name: Build & Test Docker
+      run: >- 
+            docker build
+            --build-arg NUGET_GITHUB_SERVER_URL=${{ secrets.nuget_github_server_url }}
+            --build-arg NUGET_GITHUB_SERVER_USERNAME=${{ secrets.nuget_github_server_username }}
+            --build-arg NUGET_GITHUB_SERVER_PASSWORD=${{ secrets.nuget_github_server_password }}
+            --build-arg NUGET_AZURE_SERVER_URL=${{ secrets.nuget_azure_server_url }}
+            --build-arg NUGET_AZURE_SERVER_USERNAME=${{ secrets.nuget_azure_server_username }}
+            --build-arg NUGET_AZURE_SERVER_PASSWORD=${{ secrets.nuget_azure_server_password }}
+            --build-arg GITVERSION=${{ env.GITVERSION_NUGETVERSIONV2 }}
+            --output type=docker
+            --file ${{ inputs.docker_file_path }}
+            --tag ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ env.GITVERSION_NUGETVERSIONV2 }} .
+
+    - name: Extract test results
+      if: inputs.docker_has_tests == true
+      run: |
+            docker create -ti --name dummy ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ env.GITVERSION_NUGETVERSIONV2 }} bash
+            docker cp dummy:/TestResults/. ./TestResults
+            
+            if [[ ${{ inputs.docker_has_code_coverage }} == true ]]; then
+              cp TestResults/*/coverage.cobertura.xml TestResults/coverage.cobertura.xml
+            fi
+
+    - name: Upload test results
+      if: (success() || failure()) && hashFiles('TestResults/*.trx') != ''
+      uses: dorny/test-reporter@v1.5.0
+      with:
+        name: Tests
+        working-directory: ${{ github.workspace }}/TestResults
+        path: '*.trx'
+        reporter: dotnet-trx
+        max-annotations: '50'
+        token: ${{ secrets.nuget_github_server_password }}
+
+    - name: Code Coverage Summary Report
+      uses: irongut/CodeCoverageSummary@v1.0.2
+      id: codecoveragereport
+      if: hashFiles('TestResults/*.xml') != ''
+      with:
+        filename: TestResults/coverage.cobertura.xml
+        badge: true
+        format: 'markdown'
+        output: 'both'
+
+    - name: Get Pull Request information
+      uses: 8BitJonny/gh-get-current-pr@2.0.0
+      id: PR
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        sha: ${{ github.event.pull_request.head.sha }}
+        filterOutClosed: true
+
+    - name: Add Coverage PR Comment
+      uses: marocchino/sticky-pull-request-comment@v2
+      if: steps.PR.outputs.number != '' && steps.codecoveragereport.outcome == 'success'
+      with:
+        number: ${{ steps.PR.outputs.number }}
+        recreate: true
+        path: code-coverage-results.md
+
+    - name: Docker Login
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+      uses: docker/login-action@v1.10.0
+      with:
+        registry: ${{ secrets.docker_server_url }}
+        username: ${{ secrets.docker_server_username }}
+        password: ${{ secrets.docker_server_password }}
+
+    - name: Docker Upload & Release - latest
+      if: startsWith(github.ref, 'refs/tags/')
+      run: |
+          docker tag ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ env.GITVERSION_NUGETVERSIONV2 }} ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:latest
+          docker push ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:latest
+
+    - name: Docker Upload & Release - build
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+      run: |
+          docker push ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ env.GITVERSION_NUGETVERSIONV2 }}
+
+    - name: Install Octopus CLI
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+      uses: OctopusDeploy/install-octopus-cli-action@v1.1.8
+      with:
+        version: latest
+
+    # - name: Setup .NET Core SDK
+    #   if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+    #   uses: actions/setup-dotnet@v1.9.0
+    #   with:
+    #     dotnet-version: '6.0.x'
+
+    - name: Determine Octopus release branch
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+      id: octopus-channel
+      run: |
+          echo "::set-output name=autorelease::false"
+
+          if [[ $GITHUB_REF == 'refs/tags/'* ]]; then
+            echo "::set-output name=channel::Production"
+            echo "::set-output name=notes::https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
+
+            if [[ ${{ inputs.octo_auto_release_prod }} == true ]]; then
+              echo "::set-output name=autorelease::true"
+            fi
+          else
+            echo "::set-output name=channel::Development"
+            echo "::set-output name=notes::https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
+
+            if [[ ${{ inputs.octo_auto_release_dev }} == true ]]; then
+              echo "::set-output name=autorelease::true"
+            fi
+          fi
+
+    - name: Octopus Create release
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+      run: |
+          octo pack --format="NuPkg" --id="${{ inputs.docker_image_name }}" --version="${{ env.GITVERSION_NUGETVERSIONV2 }}" --include="nomad/${{ inputs.docker_image_name }}.hcl"
+          octo push --server="${{ secrets.octopus_server_url }}" --apiKey "${{ secrets.octopus_server_apikey }}" --space="Spaces-1" --package "${{ inputs.docker_image_name }}.${{ env.GITVERSION_NUGETVERSIONV2 }}.nupkg"
+          octo create-release --project "${{ inputs.docker_image_name }}" --version "${{ env.GITVERSION_NUGETVERSIONV2 }}" --packageVersion "${{ env.GITVERSION_NUGETVERSIONV2 }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --server "${{ secrets.octopus_server_url }}" --apiKey "${{ secrets.octopus_server_apikey }}"
+
+          if ${{ steps.octopus-channel.outputs.autorelease }}; then
+            octo deploy-release --project "${{ inputs.docker_image_name }}" --version "${{ env.GITVERSION_NUGETVERSIONV2 }}" --tenant "*" --deployTo "${{ steps.octopus-channel.outputs.channel }}" --server "${{ secrets.octopus_server_url }}" --apiKey "${{ secrets.octopus_server_apikey }}"
+          fi

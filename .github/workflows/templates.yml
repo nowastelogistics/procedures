@@ -1,0 +1,84 @@
+name: Templates zip
+
+on:
+  workflow_call:
+    inputs:
+      templates_name:
+        required: true
+        type: string
+      octo_auto_release_dev:
+        required: false
+        type: boolean
+        default: false
+      octo_auto_release_prod:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      octopus_server_url:
+        required: true
+      octopus_server_apikey:
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v0.9.11
+      with:
+        versionSpec: '5.x'
+
+    - name: Determine Version
+      uses: gittools/actions/gitversion/execute@v0.9.11
+      with:
+        useConfigFile: true
+        configFilePath: GitVersion.yml
+
+    - name: Install Octopus CLI
+      uses: OctopusDeploy/install-octopus-cli-action@v1.1.8
+      with:
+        version: latest
+
+    - name: Determine Octopus release branch
+      id: octopus-channel
+      run: |
+          echo "::set-output name=autorelease::false"
+
+          if [[ $GITHUB_REF == 'refs/tags/'* ]]; then
+            echo "::set-output name=channel::Production"
+            echo "::set-output name=notes::https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
+
+            if [[ ${{ inputs.octo_auto_release_prod }} == true ]]; then
+              echo "::set-output name=autorelease::true"
+            fi
+          else
+            echo "::set-output name=channel::Development"
+            echo "::set-output name=notes::https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
+
+            if [[ ${{ inputs.octo_auto_release_dev }} == true ]]; then
+              echo "::set-output name=autorelease::true"
+            fi
+          fi
+
+    - name: Archive Release
+      uses: thedoctor0/zip-release@0.6.0
+      with:
+        type: 'zip'
+        filename: '${{ inputs.templates_name }}.zip'
+        exclusions: '*.git* /*node_modules/* .editorconfig GitVersion.yml'
+
+    - name: Octopus Create release
+      run: |
+          octo pack --format="NuPkg" --id="${{ inputs.templates_name }}" --version="${{ env.GITVERSION_NUGETVERSIONV2 }}" --include="${{ inputs.templates_name }}.zip"
+          octo push --server="${{ secrets.octopus_server_url }}" --apiKey "${{ secrets.octopus_server_apikey }}" --space="Spaces-1" --package "${{ inputs.templates_name }}.${{ env.GITVERSION_NUGETVERSIONV2 }}.nupkg"
+          octo create-release --project "${{ inputs.templates_name }}" --version "${{ env.GITVERSION_NUGETVERSIONV2 }}" --packageVersion "${{ env.GITVERSION_NUGETVERSIONV2 }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --server "${{ secrets.octopus_server_url }}" --apiKey "${{ secrets.octopus_server_apikey }}"
+
+          if ${{ steps.octopus-channel.outputs.autorelease }}; then
+            octo deploy-release --project "${{ inputs.templates_name }}" --version "${{ env.GITVERSION_NUGETVERSIONV2 }}" --deployTo "${{ steps.octopus-channel.outputs.channel }}" --server "${{ secrets.octopus_server_url }}" --apiKey "${{ secrets.octopus_server_apikey }}"
+          fi

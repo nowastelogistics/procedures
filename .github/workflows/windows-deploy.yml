@@ -1,0 +1,141 @@
+name: Windows deploy build
+
+on:
+  workflow_call:
+    inputs:
+      project_name:
+        required: true
+        type: string
+      project_file_path:
+        required: true
+        type: string
+      project_test_file_path:
+        required: false
+        type: string
+      octo_auto_release_dev:
+        required: false
+        type: boolean
+        default: false
+      octo_auto_release_prod:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      nuget_github_server_url:
+        required: true
+      nuget_github_server_username:
+        required: true
+      nuget_github_server_password:
+        required: true
+      nuget_azure_server_url:
+        required: true
+      nuget_azure_server_username:
+        required: true
+      nuget_azure_server_password:
+        required: true
+      octopus_server_url:
+        required: true
+      octopus_server_apikey:
+        required: true
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v0.9.11
+      with:
+        versionSpec: '5.x'
+
+    - name: Determine Version
+      uses: gittools/actions/gitversion/execute@v0.9.11
+      with:
+        useConfigFile: true
+        configFilePath: GitVersion.yml
+
+    - name: Setup .NET Core SDK
+      uses: actions/setup-dotnet@v1.9.0
+      with:
+        dotnet-version: '6.0.x'
+        
+    - name: Install Octopus CLI
+      uses: OctopusDeploy/install-octopus-cli-action@v1.1.8
+      with:
+        version: latest
+
+    - name: Prepare NuGet sources
+      run: |
+        dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }}
+        dotnet nuget add source --username ${{ secrets.nuget_azure_server_username }} --password ${{ secrets.nuget_azure_server_password }} --store-password-in-clear-text --name azure ${{ secrets.nuget_azure_server_url }}
+
+    - name: Run tests
+      id: test
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.project_test_file_path }}" ]; then
+          echo "::set-output name=tests-exists::true"
+          dotnet test ${{ inputs.project_test_file_path }} --results-directory ./TestResults --logger "trx;LogFileName=test-results.trx"
+        else
+          echo "::set-output name=exists::false"
+        fi
+
+    - name: Upload test results
+      if: (success() || failure()) && steps.test.outputs.tests-exists == 'true'
+      uses: dorny/test-reporter@v1
+      with:
+        name: Tests
+        working-directory: ${{ github.workspace }}/TestResults
+        path: '*.trx'
+        reporter: dotnet-trx
+        max-annotations: '50'
+        token: ${{ secrets.nuget_github_server_password }}
+
+    - name: Build & Pack NuGet
+      shell: bash
+      run: |
+        dotnet publish ${{ inputs.project_file_path }} -p:Version=${{ env.GitVersion_NuGetVersionV2 }} --configuration Release --output build
+        octo pack --format="NuPkg" --id="${{ inputs.project_name }}" --version="${{ env.GITVERSION_NUGETVERSIONV2 }}" --basePath="build" --include="**" --include="../nomad/${{ inputs.project_name }}.hcl"
+
+    - name: Create NuGet release
+      if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/develop'
+      shell: bash
+      run: |
+        octo push --server="${{ secrets.octopus_server_url }}" --apiKey "${{ secrets.octopus_server_apikey }}" --space="Spaces-1" --package "${{ inputs.project_name }}.${{ env.GITVERSION_NUGETVERSIONV2 }}.nupkg"
+
+    - name: Determine Octopus release branch
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+      id: octopus-channel
+      shell: bash
+      run: |
+          echo "::set-output name=autorelease::false"
+
+          if [[ $GITHUB_REF == 'refs/tags/'* ]]; then
+            echo "::set-output name=channel::Production"
+            echo "::set-output name=notes::https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
+
+            if [[ ${{ inputs.octo_auto_release_prod }} == true ]]; then
+              echo "::set-output name=autorelease::true"
+            fi
+          else
+            echo "::set-output name=channel::Development"
+            echo "::set-output name=notes::https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
+
+            if [[ ${{ inputs.octo_auto_release_dev }} == true ]]; then
+              echo "::set-output name=autorelease::true"
+            fi
+          fi
+          
+    - name: Octopus Create release
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+      shell: bash
+      run: |
+          octo create-release --project "${{ inputs.project_name }}" --version "${{ env.GITVERSION_NUGETVERSIONV2 }}" --packageVersion "${{ env.GITVERSION_NUGETVERSIONV2 }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --server "${{ secrets.octopus_server_url }}" --apiKey "${{ secrets.octopus_server_apikey }}"
+
+          if ${{ steps.octopus-channel.outputs.autorelease }}; then
+            octo deploy-release --project "${{ inputs.project_name }}" --version "${{ env.GITVERSION_NUGETVERSIONV2 }}" --tenant "*" --deployTo "${{ steps.octopus-channel.outputs.channel }}" --server "${{ secrets.octopus_server_url }}" --apiKey "${{ secrets.octopus_server_apikey }}"
+          fi

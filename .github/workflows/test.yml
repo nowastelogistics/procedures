@@ -1,0 +1,37 @@
+name: TestRun
+
+on:
+  workflow_dispatch:
+
+jobs:
+  reusable_workflow_job:
+    uses: nowastelogistics/procedures/.github/workflows/docker.yml@master
+    with:
+      docker_file_path: Dockerfile
+      docker_image_name: imagename
+    secrets:
+      docker_server_url: ${{ secrets.DOCKER_GITHUB_URL }}
+      docker_server_username: ${{ github.repository_owner }}
+      docker_server_password: ${{ secrets.GITHUB_TOKEN }}
+      nuget_github_server_url: ${{ secrets.NUGET_GITHUB_URL }}
+      nuget_github_server_username: ${{ secrets.DOCKER_GITHUB_USERNAME }}
+      nuget_github_server_password: ${{ secrets.GITHUB_TOKEN }}
+      nuget_azure_server_url: ${{ secrets.NUGET_AZURE_URL }}
+      nuget_azure_server_username: ${{ secrets.NUGET_AZURE_USERNAME }}
+      nuget_azure_server_password: ${{ secrets.NUGET_AZURE_PASSWORD }}
+      octopus_server_url: ${{ secrets.OCTOPUS_URL }}
+      octopus_server_apikey: ${{ secrets.OCTOPUS_APIKEY }}
+
+
+  # test:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #   - name: Set up secret file
+  #     env:
+  #       DEBUG_PASSWORD: ${{ toJSON(github) }}
+  #       DEBUG_SECRET_KEY: ${{ toJSON(secrets) }}
+  #     run: |
+  #       echo $DEBUG_PASSWORD >> secrets.txt
+  #       echo $DEBUG_SECRET_KEY >> secrets2.txt
+  #   - name: view the secrets context
+  #     uses: mxschmitt/action-tmate@v3.7
