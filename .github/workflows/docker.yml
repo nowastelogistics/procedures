@@ -122,6 +122,7 @@ jobs:
 
     - name: Get Pull Request information
       uses: 8BitJonny/gh-get-current-pr@2.0.0
+      if: steps.codecoveragereport.outcome == 'success'
       id: PR
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -130,7 +131,7 @@ jobs:
 
     - name: Add Coverage PR Comment
       uses: marocchino/sticky-pull-request-comment@v2
-      if: steps.PR.outputs.number != '' && steps.codecoveragereport.outcome == 'success'
+      if: steps.PR.outputs.number != '' && steps.PR.outcome == 'success'
       with:
         number: ${{ steps.PR.outputs.number }}
         recreate: true
