@@ -75,7 +75,34 @@ jobs:
         path: '*.trx'
         reporter: dotnet-trx
         max-annotations: '50'
-        token: ${{ secrets.nuget_github_server_password }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Code Coverage Summary Report
+      uses: irongut/CodeCoverageSummary@v1.0.2
+      id: codecoveragereport
+      if: hashFiles('TestResults/*.xml') != ''
+      with:
+        filename: TestResults/coverage.cobertura.xml
+        badge: true
+        format: 'markdown'
+        output: 'both'
+
+    - name: Get Pull Request information
+      uses: 8BitJonny/gh-get-current-pr@2.0.0
+      if: steps.codecoveragereport.outcome == 'success'
+      id: PR
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        sha: ${{ github.event.pull_request.head.sha }}
+        filterOutClosed: true
+
+    - name: Add Coverage PR Comment
+      uses: marocchino/sticky-pull-request-comment@v2
+      if: steps.PR.outputs.number != '' && steps.PR.outcome == 'success'
+      with:
+        number: ${{ steps.PR.outputs.number }}
+        recreate: true
+        path: code-coverage-results.md
 
     - name: Build & Pack NuGet
       run: |
