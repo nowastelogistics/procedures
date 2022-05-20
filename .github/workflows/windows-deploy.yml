@@ -139,3 +139,6 @@ jobs:
           if ${{ steps.octopus-channel.outputs.autorelease }}; then
             octo deploy-release --project "${{ inputs.project_name }}" --version "${{ env.GITVERSION_NUGETVERSIONV2 }}" --tenant "*" --deployTo "${{ steps.octopus-channel.outputs.channel }}" --server "${{ secrets.octopus_server_url }}" --apiKey "${{ secrets.octopus_server_apikey }}"
           fi
+
+          echo '### Octopus release' >> $GITHUB_STEP_SUMMARY
+          echo 'Pushed new release of windows application **${{ inputs.project_name }}** version **${{ env.GITVERSION_NUGETVERSIONV2 }}** to Octopus' >> $GITHUB_STEP_SUMMARY

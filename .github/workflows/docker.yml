@@ -202,4 +202,4 @@ jobs:
           fi
 
           echo '### Octopus release' >> $GITHUB_STEP_SUMMARY
-          echo 'Pushed new release of ${{ inputs.docker_image_name }} version ${{ env.GITVERSION_NUGETVERSIONV2 }} to Octopus' >> $GITHUB_STEP_SUMMARY
+          echo 'Pushed new release of docker container **${{ inputs.docker_image_name }}** version **${{ env.GITVERSION_NUGETVERSIONV2 }}** to Octopus' >> $GITHUB_STEP_SUMMARY
