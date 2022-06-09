@@ -54,7 +54,6 @@ jobs:
     - name: Prepare NuGet sources
       run: |
         dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }}
-        dotnet nuget add source --username ${{ secrets.nuget_azure_server_username }} --password ${{ secrets.nuget_azure_server_password }} --store-password-in-clear-text --name azure ${{ secrets.nuget_azure_server_url }}
 
     - name: Run tests
       id: test
@@ -116,7 +115,6 @@ jobs:
       shell: bash
       run: |
         dotnet nuget push nupkgs/${{ inputs.project_nuget_name }}.${{ env.GitVersion_NuGetVersionV2 }}.nupkg --api-key ${{ secrets.nuget_github_server_password }} --source github --skip-duplicate
-        dotnet nuget push nupkgs/${{ inputs.project_nuget_name }}.${{ env.GitVersion_NuGetVersionV2 }}.nupkg --api-key ${{ secrets.nuget_azure_server_password }} --source azure --skip-duplicate
 
         echo '### NuGet package' >> $GITHUB_STEP_SUMMARY
         echo 'Pushed new release of package **${{ inputs.project_nuget_name }}** version **${{ env.GITVERSION_NUGETVERSIONV2 }}** to feed' >> $GITHUB_STEP_SUMMARY
