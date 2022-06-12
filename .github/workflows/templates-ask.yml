@@ -60,7 +60,6 @@ jobs:
     - name: Prepare NuGet sources
       run: |
         dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }}
-        dotnet nuget add source --username ${{ secrets.nuget_azure_server_username }} --password ${{ secrets.nuget_azure_server_password }} --store-password-in-clear-text --name azure ${{ secrets.nuget_azure_server_url }}
 
     - name: Install validation tool
       run: |
