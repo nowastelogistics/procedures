@@ -92,7 +92,7 @@ jobs:
         path: '*.trx'
         reporter: dotnet-trx
         max-annotations: '50'
-        token: ${{ secrets.nuget_github_server_password }}
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build & Pack NuGet
       shell: bash
