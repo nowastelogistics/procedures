@@ -97,7 +97,7 @@ jobs:
     - name: Build & Pack NuGet
       shell: bash
       run: |
-        dotnet publish ${{ inputs.project_file_path }} -p:Version=${{ env.GitVersion_NuGetVersionV2 }} --configuration Release --output build
+        dotnet publish ${{ inputs.project_file_path }} -p:Version=${{ env.GitVersion_NuGetVersionV2 }} --configuration Release --output build --arch x64
         octo pack --format="NuPkg" --id="${{ inputs.project_name }}" --version="${{ env.GITVERSION_NUGETVERSIONV2 }}" --basePath="build" --include="**" --include="../nomad/${{ inputs.project_name }}.hcl"
 
     - name: Create NuGet release
