@@ -49,7 +49,8 @@ jobs:
     - name: Setup .NET Core SDK
       uses: actions/setup-dotnet@v2
       with:
-        dotnet-version: '7.0'
+        dotnet-version: '7.0.x'
+        include-prerelease: true
 
     - name: Prepare NuGet sources
       run: |
