@@ -112,7 +112,7 @@ jobs:
         dotnet pack ${{ inputs.project_file_path }} -p:Version=${{ env.GitVersion_NuGetVersionV2 }} --configuration Release --output nupkgs
 
     - name: Create NuGet release
-      if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/develop'
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
       shell: bash
       run: |
         dotnet nuget push nupkgs/${{ inputs.project_nuget_name }}.${{ env.GitVersion_NuGetVersionV2 }}.nupkg --api-key ${{ secrets.nuget_github_server_password }} --source github --skip-duplicate
