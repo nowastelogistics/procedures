@@ -28,7 +28,7 @@ on:
 
 jobs:
   build:
-    runs-on: windows-2022
+    runs-on: self-hosted
     steps:
     - name: Checkout source
       uses: actions/checkout@v2
