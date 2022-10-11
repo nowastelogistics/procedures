@@ -1,0 +1,89 @@
+name: System Tests
+
+on:
+  workflow_call:
+    inputs:
+      project_file_path:
+        required: true
+        type: string
+      project_test_file_path:
+        required: false
+        type: string
+      project_nuget_name:
+        required: true
+        type: string
+    secrets:
+      nuget_github_server_url:
+        required: true
+      nuget_github_server_username:
+        required: true
+      nuget_github_server_password:
+        required: true
+      nuget_azure_server_url:
+        required: true
+      nuget_azure_server_username:
+        required: true
+      nuget_azure_server_password:
+        required: true
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v0.9.11
+      with:
+        versionSpec: '5.x'
+
+    - name: Determine Version
+      uses: gittools/actions/gitversion/execute@v0.9.11
+      with:
+        useConfigFile: true
+        configFilePath: GitVersion.yml
+
+    - name: Setup .NET Core SDK
+      uses: actions/setup-dotnet@v1.9.0
+      with:
+        dotnet-version: '6.0.x'
+
+    - name: Prepare NuGet sources
+      run: |
+        dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }}
+        dotnet nuget add source --username ${{ secrets.nuget_azure_server_username }} --password ${{ secrets.nuget_azure_server_password }} --store-password-in-clear-text --name azure ${{ secrets.nuget_azure_server_url }}
+
+    - name: Run System Tests
+      id: test
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.project_test_file_path }}" ]; then
+          echo "::set-output name=tests-exists::true"
+          dotnet test ${{ inputs.project_test_file_path }} --filter Category="CI" --results-directory ./TestResults --logger "trx;LogFileName=system-test-results.trx"
+        else
+          echo "::set-output name=exists::false"
+        fi
+
+    - name: Upload System Tests results
+      if: (success() || failure()) && steps.test.outputs.tests-exists == 'true'
+      uses: dorny/test-reporter@v1
+      with:
+        name: Tests
+        working-directory: ${{ github.workspace }}/TestResults
+        path: '*.trx'
+        reporter: dotnet-trx
+        max-annotations: '50'
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Code Coverage Summary Report
+      uses: irongut/CodeCoverageSummary@v1.0.2
+      id: codecoveragereport
+      if: hashFiles('TestResults/*.xml') != ''
+      with:
+        filename: TestResults/coverage.cobertura.xml
+        badge: true
+        format: 'markdown'
+        output: 'both'
