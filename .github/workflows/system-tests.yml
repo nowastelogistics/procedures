@@ -3,14 +3,8 @@ name: System Tests
 on:
   workflow_call:
     inputs:
-      project_file_path:
-        required: true
-        type: string
       project_test_file_path:
         required: false
-        type: string
-      project_nuget_name:
-        required: true
         type: string
     secrets:
       nuget_github_server_url:
