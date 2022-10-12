@@ -39,16 +39,6 @@ jobs:
       with:
         dotnet-version: '6.0.x'
       
-    - name: Run System Tests
+    - name: Run System Tests & Upload Results
       id: test
       run: dotnet test ${{ inputs.project_test_file_path }} --filter Category="CI" --results-directory ./TestResults --logger "trx;LogFileName=system-tests-results.trx"
-
-    - name: Upload System Tests results
-      uses: dorny/test-reporter@v1
-      with:
-        name: Tests
-        working-directory: ${{ github.workspace }}/TestResults
-        path: '*.trx'
-        reporter: dotnet-trx
-        max-annotations: '50'
-        token: ${{ secrets.GITHUB_TOKEN }}
