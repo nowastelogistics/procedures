@@ -49,7 +49,7 @@ jobs:
       run: |
         if [ -n "${{ inputs.project_test_file_path }}" ]; then
           echo "::set-output name=tests-exists::true"
-          dotnet test .\${{ inputs.project_test_file_path }} --filter Category="CI" --results-directory ./TestResults --logger "trx;LogFileName=system-test-results.trx"
+          dotnet test --filter Category="CI" --results-directory ./TestResults/SystemTests --logger "trx;LogFileName=system-test-results.trx"
         else
           echo "::set-output name=exists::false"
         fi
