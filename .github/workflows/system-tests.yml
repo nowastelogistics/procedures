@@ -47,7 +47,7 @@ jobs:
       uses: dorny/test-reporter@v1
       with:
         name: Tests
-        working-directory: ${{ github.workspace }}/TestResults
+        working-directory: ${{ github.workspace }}\TestResults\SystemTests
         path: '*.trx'
         reporter: dotnet-trx
         max-annotations: '50'
