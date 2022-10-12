@@ -42,10 +42,9 @@ jobs:
 #    - name: Prepare NuGet sources
 #      run: |
 #        dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }}
-
+      
     - name: Run System Tests
       id: test
-      shell: bash
       run: dotnet test ${{ inputs.project_test_file_path }} --filter Category="CI" --results-directory ./TestResults/SystemTests --logger "trx;LogFileName=system-test-results.trx"
 
     - name: Upload System Tests results
