@@ -41,10 +41,9 @@ jobs:
       
     - name: Run System Tests
       id: test
-      run: dotnet test ${{ inputs.project_test_file_path }} --filter Category="CI" --results-directory ./TestResults --logger "trx;LogFileName=system-test-results.trx"
+      run: dotnet test ${{ inputs.project_test_file_path }} --filter Category="CI" --results-directory ./TestResults/SystemTests --logger "trx;LogFileName=system-test-results.trx"
 
     - name: Upload System Tests Results
-      if: (success() || failure()) && steps.test.outputs.tests-exists == 'true'
       uses: dorny/test-reporter@v1
       with:
         name: Tests
