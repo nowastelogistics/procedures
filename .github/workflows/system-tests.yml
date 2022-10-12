@@ -6,6 +6,13 @@ on:
       project_test_file_path:
         required: false
         type: string
+    secrets:
+        nuget_github_server_url:
+          required: true
+        nuget_github_server_username:
+          required: true
+        nuget_github_server_password:
+          required: true
 
 jobs:
   build:
