@@ -39,9 +39,9 @@ jobs:
       with:
         dotnet-version: '6.0.x'
 
-    - name: Prepare NuGet sources
-      run: |
-        dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }}
+#    - name: Prepare NuGet sources
+#      run: |
+#        dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }}
 
     - name: Run System Tests
       id: test
