@@ -41,7 +41,7 @@ jobs:
       
     - name: Run System Tests
       id: test
-      run: dotnet test ${{ inputs.project_test_file_path }} --filter Category="CI" --results-directory ./TestResults --logger "trx;LogFileName=system-test-results.trx"
+      run: dotnet test ${{ inputs.project_test_file_path }} --filter Category="CI" --results-directory ./TestResults --logger "trx;LogFileName=system-tests-results.trx"
 
     - name: Upload System Tests results
       uses: dorny/test-reporter@v1
@@ -52,13 +52,3 @@ jobs:
         reporter: dotnet-trx
         max-annotations: '50'
         token: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Code Coverage Summary Report
-      uses: irongut/CodeCoverageSummary@v1.0.2
-      id: codecoveragereport
-      if: hashFiles('TestResults/*.xml') != ''
-      with:
-        filename: TestResults/coverage.cobertura.xml
-        badge: true
-        format: 'markdown'
-        output: 'both'
