@@ -52,3 +52,6 @@ jobs:
         reporter: dotnet-trx
         max-annotations: '50'
         token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Adding markdown
+      run: echo system-tests-results.trx >> $GITHUB_STEP_SUMMARY
