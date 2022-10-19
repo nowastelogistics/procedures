@@ -41,7 +41,7 @@ jobs:
       
     - name: Run System Tests
       id: test
-      run: dotnet test ${{ inputs.project_test_file_path }} --filter Category="CI" --results-directory ./TestResults --logger "trx;LogFileName=system-tests-results.trx"
+      run: dotnet test ${{ inputs.project_test_file_path }} --filter Category="System.Tests" --results-directory ./TestResults --logger "trx;LogFileName=system-tests-results.trx"
 
     - name: Upload System Tests Results
       uses: dorny/test-reporter@v1
