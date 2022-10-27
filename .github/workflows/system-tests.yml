@@ -17,7 +17,6 @@ on:
 jobs:
   build:
     runs-on: self-hosted
-    name: System Tests Results - ${{ env.TIME }}
     steps:
     - name: Checkout source
       uses: actions/checkout@v2
@@ -47,7 +46,7 @@ jobs:
     - name: Upload System Tests Results
       uses: dorny/test-reporter@v1
       with:
-        name: ...
+        name: System Tests Results - "${{ env.TIME }}"
         working-directory: ${{ github.workspace }}\TestResults
         path: '*.trx'
         reporter: dotnet-trx
