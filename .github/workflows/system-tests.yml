@@ -46,7 +46,7 @@ jobs:
     - name: Upload System Tests Results
       uses: dorny/test-reporter@v1
       with:
-        name: System Tests Results - ${ env.TIME }
+        name: System Tests Results
         working-directory: ${{ github.workspace }}\TestResults
         path: '*.trx'
         reporter: dotnet-trx
