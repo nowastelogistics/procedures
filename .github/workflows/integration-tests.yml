@@ -39,7 +39,7 @@ jobs:
       with:
         dotnet-version: '6.0.x'
 
-    - name: Run System Tests
+    - name: Run Integration Tests
       id: test
       run: dotnet test ${{ inputs.project_test_file_path }} --results-directory ./TestResults --logger "trx;LogFileName=integration-tests-results.trx"
 
