@@ -25,49 +25,49 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout source
-      uses: actions/checkout@v2
+      uses: actions/checkout@v2.5.0
       with:
         fetch-depth: 0
 
     - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v0.9.11
+      uses: gittools/actions/gitversion/setup@v0.9.15
       with:
         versionSpec: '5.x'
 
     - name: Determine Version
-      uses: gittools/actions/gitversion/execute@v0.9.11
+      uses: gittools/actions/gitversion/execute@v0.9.15
       with:
         useConfigFile: true
         configFilePath: GitVersion.yml
 
     - name: Install Octopus CLI
-      uses: OctopusDeploy/install-octopus-cli-action@v1.1.8
+      uses: OctopusDeploy/install-octopus-cli-action@v1.2.0
       with:
         version: latest
 
     - name: Determine Octopus release branch
       id: octopus-channel
       run: |
-          echo "::set-output name=autorelease::false"
+          echo "autorelease=false" >> $GITHUB_OUTPUT
 
           if [[ $GITHUB_REF == 'refs/tags/'* ]]; then
-            echo "::set-output name=channel::Production"
-            echo "::set-output name=notes::https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
+            echo "channel=Production" >> $GITHUB_OUTPUT
+            echo "notes=https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
 
             if [[ ${{ inputs.octo_auto_release_prod }} == true ]]; then
-              echo "::set-output name=autorelease::true"
+              echo "autorelease=true" >> $GITHUB_OUTPUT
             fi
           else
-            echo "::set-output name=channel::Development"
-            echo "::set-output name=notes::https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
+            echo "channel=Development" >> $GITHUB_OUTPUT
+            echo "notes=https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA" >> $GITHUB_OUTPUT
 
             if [[ ${{ inputs.octo_auto_release_dev }} == true ]]; then
-              echo "::set-output name=autorelease::true"
+              echo "autorelease=true" >> $GITHUB_OUTPUT
             fi
           fi
 
     - name: Archive Release
-      uses: thedoctor0/zip-release@0.6.0
+      uses: thedoctor0/zip-release@0.6.2
       with:
         type: 'zip'
         filename: '${{ inputs.templates_name }}.zip'

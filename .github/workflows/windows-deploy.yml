@@ -43,28 +43,28 @@ jobs:
     runs-on: windows-2022
     steps:
     - name: Checkout source
-      uses: actions/checkout@v2
+      uses: actions/checkout@v2.5.0
       with:
         fetch-depth: 0
 
     - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v0.9.11
+      uses: gittools/actions/gitversion/setup@v0.9.15
       with:
         versionSpec: '5.x'
 
     - name: Determine Version
-      uses: gittools/actions/gitversion/execute@v0.9.11
+      uses: gittools/actions/gitversion/execute@v0.9.15
       with:
         useConfigFile: true
         configFilePath: GitVersion.yml
 
     - name: Setup .NET Core SDK
-      uses: actions/setup-dotnet@v1.9.0
+      uses: actions/setup-dotnet@v3.0.3
       with:
         dotnet-version: '6.0.x'
         
     - name: Install Octopus CLI
-      uses: OctopusDeploy/install-octopus-cli-action@v1.1.8
+      uses: OctopusDeploy/install-octopus-cli-action@v1.2.0
       with:
         version: latest
 
@@ -77,15 +77,15 @@ jobs:
       shell: bash
       run: |
         if [ -n "${{ inputs.project_test_file_path }}" ]; then
-          echo "::set-output name=tests-exists::true"
+          echo "tests-exists=true" >> $GITHUB_OUTPUT
           dotnet test ${{ inputs.project_test_file_path }} --results-directory ./TestResults --logger "trx;LogFileName=test-results.trx"
         else
-          echo "::set-output name=exists::false"
+          echo "exists=false" >> $GITHUB_OUTPUT
         fi
 
     - name: Upload test results
       if: (success() || failure()) && steps.test.outputs.tests-exists == 'true'
-      uses: dorny/test-reporter@v1
+      uses: dorny/test-reporter@v1.6.0
       with:
         name: Tests
         working-directory: ${{ github.workspace }}/TestResults
@@ -111,21 +111,21 @@ jobs:
       id: octopus-channel
       shell: bash
       run: |
-          echo "::set-output name=autorelease::false"
+          echo "autorelease=false" >> $GITHUB_OUTPUT
 
           if [[ $GITHUB_REF == 'refs/tags/'* ]]; then
-            echo "::set-output name=channel::Production"
-            echo "::set-output name=notes::https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
+            echo "channel=Production" >> $GITHUB_OUTPUT
+            echo "notes=https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
 
             if [[ ${{ inputs.octo_auto_release_prod }} == true ]]; then
-              echo "::set-output name=autorelease::true"
+              echo "autorelease=true" >> $GITHUB_OUTPUT
             fi
           else
-            echo "::set-output name=channel::Development"
-            echo "::set-output name=notes::https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
+            echo "channel=Development" >> $GITHUB_OUTPUT
+            echo "notes=https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA" >> $GITHUB_OUTPUT
 
             if [[ ${{ inputs.octo_auto_release_dev }} == true ]]; then
-              echo "::set-output name=autorelease::true"
+              echo "autorelease=true" >> $GITHUB_OUTPUT
             fi
           fi
           
