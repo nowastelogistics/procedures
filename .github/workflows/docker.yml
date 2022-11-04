@@ -172,7 +172,7 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
       id: octopus-channel
       run: |
-          echo "::set-output name=autorelease::false"
+          echo "autorelease=false" >> $GITHUB_OUTPUT
 
           if [[ $GITHUB_REF == 'refs/tags/'* ]]; then
             echo "::set-output name=channel::Production"
