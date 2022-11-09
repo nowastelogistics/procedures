@@ -23,21 +23,10 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v0.9.15
-      with:
-        versionSpec: '5.x'
-
-    - name: Determine Version
-      uses: gittools/actions/gitversion/execute@v0.9.15
-      with:
-        useConfigFile: true
-        configFilePath: GitVersion.yml
-
     - name: Setup .NET Core SDK
       uses: actions/setup-dotnet@v2.1.1
       with:
-        dotnet-version: '6.0.x'
+        dotnet-version: '7.0.x'
 
     - name: Run Integration Tests
       id: test
