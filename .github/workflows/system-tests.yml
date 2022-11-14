@@ -57,8 +57,8 @@ jobs:
         project: NWL
         issuetype: "Bug"
         summary: "System Tests failed for ${{ github.repository }}"
-        description: "${{ steps.test.outputs.issue }}\n\nCreated from GitHub Action"
-        fields: '{"customfield_10031": {id: "10021", value: "Non billable"}}'
+        description: "Created from GitHub Action"
+        fields: '{"customfield_10031": {id: "10021"}}'
 
     - name: Upload System Tests Results
       uses: dorny/test-reporter@v1.6.0
