@@ -58,7 +58,7 @@ jobs:
         issuetype: Task
         summary: "System Tests failed for ${{ github.repository }}"
         description: "Created from GitHub Action"
-        fields: "{'customfield_10031': {id: '10021'}}"
+        fields: '{"customfield_10031": {"id": "10021","value": "Non billable"}}'
 
     - name: Upload System Tests Results
       uses: dorny/test-reporter@v1.6.0
