@@ -58,7 +58,7 @@ jobs:
         issuetype: "Bug"
         summary: "System Tests failed for ${{ github.repository }} - #${{ steps.test.outputs.issue.number }}"
         description: "${{ steps.test.outputs.issue }}\n\nCreated from GitHub Action"
-        fields: '{"customfield_10031": "Unknown"}'
+        fields: '{"customfield_10031": [{ "name" : "Unknown"}] }'
 
     - name: Upload System Tests Results
       uses: dorny/test-reporter@v1.6.0
