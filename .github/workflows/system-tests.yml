@@ -32,6 +32,24 @@ jobs:
       id: test
       run: dotnet test ${{ inputs.project_test_file_path }} --filter Category="System.Tests" --results-directory ./TestResults --logger "trx;LogFileName=system-tests-results.trx"
 
+    - name: Failing step
+      run: exit 1
+    - name: Login to Jira
+      uses: atlassian/gajira-login@master
+      if: failure()
+      env:
+        JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+        JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+        JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+    - name: Create Jira issue on job failure
+      uses: atlassian/gajira-create@master
+      if: failure()
+      with:
+        project: Nowaste (NWL)
+        issuetype: "Bug"
+        summary: "${{ github.event.issue.title }} #${{ github.event.issue.number }}"
+        description: "${{ github.event.issue.body }}\n\nCreated from GitHub Action"
+
     - name: Upload System Tests Results
       uses: dorny/test-reporter@v1.6.0
       with:
