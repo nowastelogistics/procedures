@@ -54,11 +54,11 @@ jobs:
       uses: atlassian/gajira-create@master
       if: failure()
       with:
-        project: NWL
+        project: NWL-1035
         issuetype: "Bug"
         summary: "System Tests failed for ${{ github.repository }}"
         description: "${{ steps.test.outputs.issue }}\n\nCreated from GitHub Action"
-        fields: '{"customfield_10031": "billable"}'
+        fields: '{"customfield_10031": {id: "10021", value: "Non billable"}}'
 
     - name: Upload System Tests Results
       uses: dorny/test-reporter@v1.6.0
