@@ -39,6 +39,7 @@ jobs:
       #run: dotnet test ${{ inputs.project_test_file_path }} --filter Category="System.Tests" --results-directory ./TestResults --logger "trx;LogFileName=system-tests-results.trx"
 
     - name: Failing step
+      id: test
       run: exit 1
 
     - name: Login to Jira
@@ -55,8 +56,9 @@ jobs:
       with:
         project: NWL
         issuetype: "Bug"
-        summary: "${{ github.event.issue.title }} #${{ github.event.issue.number }}"
-        description: "${{ github.event.issue.body }}\n\nCreated from GitHub Action"
+        summary: "System Tests failed for ${{ github.repository }} - #${{ steps.test.outputs.issue.number }}"
+        description: "${{ steps.test.outputs.issue }}\n\nCreated from GitHub Action"
+        fields: '{"customfield_10031": "Non billable"}'
 
     - name: Upload System Tests Results
       uses: dorny/test-reporter@v1.6.0
