@@ -13,6 +13,12 @@ on:
           required: true
         nuget_github_server_password:
           required: true
+        JIRA_BASE_URL:
+          required: true
+        JIRA_USER_EMAIL:
+          required: true
+        JIRA_API_TOKEN:
+          required: true
 
 jobs:
   build:
