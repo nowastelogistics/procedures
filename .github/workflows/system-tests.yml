@@ -46,15 +46,15 @@ jobs:
         JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
         JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
 
-    - name: Create Jira issue on job failure
-      uses: atlassian/gajira-create@master
-      if: failure()
-      with:
-        project: NWL
-        issuetype: Task
-        summary: "System Tests failed for ${{ github.repository }}"
-        description: "Created from GitHub Action"
-        fields: '{"customfield_10031": {"id": "10021","value": "Non billable"}}'
+#    - name: Create Jira issue on job failure
+#      uses: atlassian/gajira-create@master
+#      if: failure()
+#      with:
+#        project: NWL
+#        issuetype: Task
+#        summary: "System Tests failed for ${{ github.repository }}"
+#        description: "Created from GitHub Action"
+#        fields: '{"customfield_10031": {"id": "10021","value": "Non billable"}}'
 
     - name: Upload System Tests Results
       uses: dorny/test-reporter@v1.6.0
