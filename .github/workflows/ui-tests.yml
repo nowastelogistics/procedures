@@ -35,10 +35,10 @@ jobs:
       id: test
       run: dotnet test ${{ inputs.project_test_file_path }} --filter Category="${{ inputs.project_test_category }}" --results-directory ./TestResults --logger "trx;LogFileName=ui-tests-results.trx"
 
-    - name: Upload System Tests Results
+    - name: Upload UI Tests Results
       uses: dorny/test-reporter@v1.6.0
       with:
-        name: System Tests Results
+        name: UI Tests Results
         working-directory: ${{ github.workspace }}\TestResults
         path: '*.trx'
         reporter: dotnet-trx
