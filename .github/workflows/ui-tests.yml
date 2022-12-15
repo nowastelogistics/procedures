@@ -16,12 +16,6 @@ on:
           required: true
         nuget_github_server_password:
           required: true
-        jira_base_url:
-          required: true
-        jira_user_email:
-          required: true
-        jira_api_token:
-          required: true
 
 jobs:
   build:
@@ -40,31 +34,3 @@ jobs:
     - name: Run UI Tests
       id: test
       run: dotnet test ${{ inputs.project_test_file_path }} --filter Category="${{ inputs.project_test_category }}" --results-directory ./TestResults --logger "trx;LogFileName=ui-tests-results.trx"
-
-    - name: Login to Jira
-      uses: atlassian/gajira-login@master
-      if: failure()
-      env:
-        JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
-        JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
-        JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-
-#    - name: Create Jira issue on job failure
-#      uses: atlassian/gajira-create@master
-#      if: failure()
-#      with:
-#        project: NWL
-#        issuetype: Task
-#        summary: "UI Tests failed for ${{ github.repository }}"
-#        description: "Created from GitHub Action"
-#        fields: '{"customfield_10031": {"id": "10021","value": "Non billable"}}'
-
-    - name: Upload UI Tests Results
-      uses: dorny/test-reporter@v1.6.0
-      with:
-        name: UI Tests Results
-        working-directory: ${{ github.workspace }}\TestResults
-        path: '*.trx'
-        reporter: dotnet-trx
-        max-annotations: '50'
-        token: ${{ secrets.GITHUB_TOKEN }}
