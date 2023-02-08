@@ -48,7 +48,7 @@ on:
         required: true
       octopus_server_apikey:
         required: true
-        
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -74,9 +74,9 @@ jobs:
       id: buildx
       with:
         install: true
-      
+
     - name: Build & Test Docker
-      run: >- 
+      run: >-
             docker build
             --build-arg NUGET_GITHUB_SERVER_URL=${{ secrets.nuget_github_server_url }}
             --build-arg NUGET_GITHUB_SERVER_USERNAME=${{ secrets.nuget_github_server_username }}
@@ -94,7 +94,7 @@ jobs:
       run: |
             docker create -ti --name dummy ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ env.GITVERSION_NUGETVERSIONV2 }} bash
             docker cp dummy:/TestResults/. ./TestResults
-            
+
             if [[ ${{ inputs.docker_has_code_coverage }} == true ]]; then
               cp TestResults/*/coverage.cobertura.xml TestResults/coverage.cobertura.xml
             fi
@@ -185,7 +185,7 @@ jobs:
             echo "channel=Development" >> $GITHUB_OUTPUT
             echo "notes=https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA" >> $GITHUB_OUTPUT
 
-            if [[ ${{ inputs.octo_auto_release_dev }} == true ]]; then
+            if [[ ${{ inputs.octo_auto_release_dev }} == true ]] && [[ $GITHUB_REF_NAME == "refs/heads/release"* ]]; then
               echo "autorelease=true" >> $GITHUB_OUTPUT
             fi
           fi

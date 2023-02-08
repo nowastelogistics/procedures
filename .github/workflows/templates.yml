@@ -61,7 +61,7 @@ jobs:
             echo "channel=Development" >> $GITHUB_OUTPUT
             echo "notes=https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA" >> $GITHUB_OUTPUT
 
-            if [[ ${{ inputs.octo_auto_release_dev }} == true ]]; then
+            if [[ ${{ inputs.octo_auto_release_dev }} == true ]] && [[ $GITHUB_REF_NAME == "refs/heads/release"* ]]; then
               echo "autorelease=true" >> $GITHUB_OUTPUT
             fi
           fi
