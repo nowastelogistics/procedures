@@ -52,9 +52,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        cache-key: ${{ runner.os }}-${{ hashFiles('Dockerfile') }}-${{ inputs.docker_file_path }}
 
     steps:
     - name: Checkout source
@@ -74,11 +71,11 @@ jobs:
         configFilePath: GitVersion.yml
 
     - name: Cache Docker layers
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: |
           /var/lib/docker
-        key: docker-${{ matrix.cache-key }}
+        key: ${{ runner.os }}-docker-${{ hashFiles(inputs.docker_file_path) }}
 
     - name: Setup buildx
       uses: docker/setup-buildx-action@v2.2.1
