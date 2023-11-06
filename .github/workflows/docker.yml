@@ -97,6 +97,13 @@ jobs:
             --file ${{ inputs.docker_file_path }}
             --tag ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ env.GITVERSION_NUGETVERSIONV2 }} .
 
+    - name: Cache Docker layers (Save)
+      uses: actions/cache@v3
+      with:
+        path: |
+          /var/lib/docker
+        key: ${{ runner.os }}-docker-${{ hashFiles(inputs.docker_file_path) }}
+
     - name: Extract test results
       if: inputs.docker_has_tests == true
       run: |
