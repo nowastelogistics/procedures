@@ -96,8 +96,8 @@ jobs:
             --build-arg GITVERSION=${{ env.GITVERSION_NUGETVERSIONV2 }}
             --output type=docker
             --file ${{ inputs.docker_file_path }}
-            --cache-from: type=gha
-            --cache-to: type=gha,mode=max
+            --cache-from type=gha
+            --cache-to type=gha,mode=max
             --tag ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ env.GITVERSION_NUGETVERSIONV2 }} .
 
     - name: Extract test results
