@@ -55,7 +55,7 @@ jobs:
 
     steps:
     - name: Checkout source
-      uses: actions/checkout@v2.5.0
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
@@ -96,6 +96,8 @@ jobs:
             --build-arg GITVERSION=${{ env.GITVERSION_NUGETVERSIONV2 }}
             --output type=docker
             --file ${{ inputs.docker_file_path }}
+            --cache-from: type=gha
+            --cache-to: type=gha,mode=max
             --tag ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ env.GITVERSION_NUGETVERSIONV2 }} .
 
     - name: Extract test results
@@ -167,7 +169,7 @@ jobs:
 
     - name: Install Octopus CLI
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
-      uses: OctopusDeploy/install-octopus-cli-action@v1.2.0
+      uses: OctopusDeploy/install-octopus-cli-action@v3
       with:
         version: latest
 
