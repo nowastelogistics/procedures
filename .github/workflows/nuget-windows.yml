@@ -116,7 +116,6 @@ jobs:
       shell: bash
       run: |
         dotnet nuget push nupkgs/${{ inputs.project_nuget_name }}.${{ env.GitVersion_NuGetVersionV2 }}.nupkg --api-key ${{ secrets.nuget_github_server_password }} --source github --skip-duplicate
-        dotnet nuget push nupkgs/${{ inputs.project_nuget_name }}.${{ env.GITVERSION_NUGETVERSIONV2 }}.nupkg --api-key ${{ secrets.nuget_azure_server_password }} --source azure --skip-duplicate
 
         echo '### NuGet package' >> $GITHUB_STEP_SUMMARY
         echo 'Pushed new release of package **${{ inputs.project_nuget_name }}** version **${{ env.GITVERSION_NUGETVERSIONV2 }}** to feed' >> $GITHUB_STEP_SUMMARY
