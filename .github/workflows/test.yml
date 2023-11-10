@@ -16,9 +16,6 @@ jobs:
       nuget_github_server_url: ${{ secrets.NUGET_GITHUB_URL }}
       nuget_github_server_username: ${{ secrets.DOCKER_GITHUB_USERNAME }}
       nuget_github_server_password: ${{ secrets.GITHUB_TOKEN }}
-      nuget_azure_server_url: ${{ secrets.NUGET_AZURE_URL }}
-      nuget_azure_server_username: ${{ secrets.NUGET_AZURE_USERNAME }}
-      nuget_azure_server_password: ${{ secrets.NUGET_AZURE_PASSWORD }}
       octopus_server_url: ${{ secrets.OCTOPUS_URL }}
       octopus_server_apikey: ${{ secrets.OCTOPUS_APIKEY }}
 

@@ -39,11 +39,8 @@ on:
       nuget_github_server_password:
         required: true
       nuget_azure_server_url:
-        required: true
       nuget_azure_server_username:
-        required: true
       nuget_azure_server_password:
-        required: true
       octopus_server_url:
         required: true
       octopus_server_apikey:
@@ -90,9 +87,6 @@ jobs:
             --build-arg NUGET_GITHUB_SERVER_URL=${{ secrets.nuget_github_server_url }}
             --build-arg NUGET_GITHUB_SERVER_USERNAME=${{ secrets.nuget_github_server_username }}
             --build-arg NUGET_GITHUB_SERVER_PASSWORD=${{ secrets.nuget_github_server_password }}
-            --build-arg NUGET_AZURE_SERVER_URL=${{ secrets.nuget_azure_server_url }}
-            --build-arg NUGET_AZURE_SERVER_USERNAME=${{ secrets.nuget_azure_server_username }}
-            --build-arg NUGET_AZURE_SERVER_PASSWORD=${{ secrets.nuget_azure_server_password }}
             --build-arg GITVERSION=${{ env.GITVERSION_NUGETVERSIONV2 }}
             --output type=docker
             --file ${{ inputs.docker_file_path }}

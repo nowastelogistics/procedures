@@ -20,11 +20,8 @@ on:
       nuget_github_server_password:
         required: true
       nuget_azure_server_url:
-        required: true
       nuget_azure_server_username:
-        required: true
       nuget_azure_server_password:
-        required: true
 
 jobs:
   build:
