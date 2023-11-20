@@ -46,12 +46,12 @@ jobs:
     - name: Setup .NET Core SDK
       uses: actions/setup-dotnet@v3.0.3
       with:
-        dotnet-version: '7.0.x'
+        dotnet-version: '8.0.x'
         include-prerelease: true
 
     - name: Prepare NuGet sources
       run: |
-        dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }}        
+        dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }}
 
     - name: Run tests
       id: test
