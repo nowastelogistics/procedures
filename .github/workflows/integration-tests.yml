@@ -27,7 +27,6 @@ jobs:
       uses: actions/setup-dotnet@v3.0.3
       with:
         dotnet-version: '7.0.x'
-        installation-path: ${{ github.workspace }}
 
     - name: Run Integration Tests
       id: test
