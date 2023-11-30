@@ -1,12 +1,9 @@
-name: UI Tests
+name: Integration Tests
 
 on:
   workflow_call:
     inputs:
       project_test_file_path:
-        required: false
-        type: string
-      project_test_category:
         required: false
         type: string
     secrets:
@@ -29,16 +26,17 @@ jobs:
     - name: Setup .NET Core SDK
       uses: actions/setup-dotnet@v3.0.3
       with:
-        dotnet-version: '7.0.x'
+        dotnet-version: '8.0.x'
 
-    - name: Run UI Tests
+    - name: Run Integration Tests
       id: test
-      run: dotnet test ${{ inputs.project_test_file_path }} --filter Category~"${{ inputs.project_test_category }}" --results-directory ./TestResults --logger "trx;LogFileName=ui-tests-results.trx" --logger "console;verbosity=normal"
+      run: dotnet test ${{ inputs.project_test_file_path }} --results-directory ./TestResults --logger "trx;LogFileName=integration-tests-results.trx"
 
-    - name: Upload UI Tests Results
+    - name: Upload Integration Tests Results
       uses: dorny/test-reporter@v1.6.0
+      if: success() || failure()
       with:
-        name: UI Tests Results
+        name: Integration Tests Results
         working-directory: ${{ github.workspace }}\TestResults
         path: '*.trx'
         reporter: dotnet-trx
