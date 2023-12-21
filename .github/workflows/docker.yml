@@ -38,9 +38,6 @@ on:
         required: true
       nuget_github_server_password:
         required: true
-      nuget_azure_server_url:
-      nuget_azure_server_username:
-      nuget_azure_server_password:
       octopus_server_url:
         required: true
       octopus_server_apikey:
