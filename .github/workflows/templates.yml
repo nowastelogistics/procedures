@@ -66,6 +66,10 @@ jobs:
             fi
           fi
 
+    - name: Write version information
+      run: |
+        echo "{\"version\": \"${{ env.GITVERSION_NUGETVERSIONV2 }}\"}" > version.json
+
     - name: Archive Release
       uses: thedoctor0/zip-release@0.6.2
       with:
