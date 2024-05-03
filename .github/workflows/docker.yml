@@ -43,6 +43,7 @@ on:
       octopus_server_apikey:
         required: true
 
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -189,12 +190,13 @@ jobs:
     - name: Octopus Create release
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
       run: |
+          octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
           octopus pack --format="NuPkg" --id="${{ inputs.docker_image_name }}" --version="${{ env.GitVersion_NuGetVersionV2 }}" --include="nomad/${{ inputs.docker_image_name }}.hcl"
-          octopus push --server="${{ secrets.octopus_server_url }}" --apiKey "${{ secrets.octopus_server_apikey }}" --space="Spaces-1" --package "${{ inputs.docker_image_name }}.${{ env.GitVersion_NuGetVersionV2 }}.nupkg"
-          octopus create-release --project "${{ inputs.docker_image_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --packageVersion "${{ env.GitVersion_NuGetVersionV2 }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --server "${{ secrets.octopus_server_url }}" --apiKey "${{ secrets.octopus_server_apikey }}"
+          octopus push --space="Spaces-1" --package "${{ inputs.docker_image_name }}.${{ env.GitVersion_NuGetVersionV2 }}.nupkg"
+          octopus create-release --project "${{ inputs.docker_image_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --packageVersion "${{ env.GitVersion_NuGetVersionV2 }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}"
 
           if ${{ steps.octopus-channel.outputs.autorelease }}; then
-            octopus deploy-release --project "${{ inputs.docker_image_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --tenant "*" --deployTo "${{ steps.octopus-channel.outputs.channel }}" --server "${{ secrets.octopus_server_url }}" --apiKey "${{ secrets.octopus_server_apikey }}"
+            octopus deploy-release --project "${{ inputs.docker_image_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --tenant "*" --deployTo "${{ steps.octopus-channel.outputs.channel }}"
           fi
 
           echo '### Octopus release' >> $GITHUB_STEP_SUMMARY
