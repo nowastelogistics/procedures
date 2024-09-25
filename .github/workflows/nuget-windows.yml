@@ -111,4 +111,4 @@ jobs:
         dotnet nuget push nupkgs/${{ inputs.project_nuget_name }}.${{ env.GitVersion_NuGetVersionV2 }}.nupkg --api-key ${{ secrets.nuget_github_server_password }} --source github --skip-duplicate
 
         echo '### NuGet package' >> $GITHUB_STEP_SUMMARY
-        echo 'Pushed new release of package **${{ inputs.project_nuget_name }}** version **${{ env.GITVERSION_NUGETVERSIONV2 }}** to feed' >> $GITHUB_STEP_SUMMARY
+        echo 'Pushed new release of package **${{ inputs.project_nuget_name }}** version **${{ env.GitVersion_NuGetVersionV2 }}** to feed' >> $GITHUB_STEP_SUMMARY
