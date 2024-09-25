@@ -25,29 +25,29 @@ jobs:
     runs-on: windows-2022
     steps:
     - name: Checkout source
-      uses: actions/checkout@v2.5.0
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
     - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v0.9.15
+      uses: gittools/actions/gitversion/setup@v3.0.0
       with:
-        versionSpec: '5.x'
+        versionSpec: '6.x'
 
     - name: Determine Version
-      uses: gittools/actions/gitversion/execute@v0.9.15
+      uses: gittools/actions/gitversion/execute@v3.0.0
       with:
         useConfigFile: true
         configFilePath: GitVersion.yml
 
     - name: Setup .NET Core SDK
-      uses: actions/setup-dotnet@v3.0.3
+      uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '7.0.x'
+        dotnet-version: '8.0.x'
 
     - name: Prepare NuGet sources
       run: |
-        dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }}        
+        dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }}
 
     - name: Run tests
       id: test
@@ -62,7 +62,7 @@ jobs:
 
     - name: Upload test results
       if: (success() || failure()) && steps.test.outputs.tests-exists == 'true'
-      uses: dorny/test-reporter@v1.6.0
+      uses: dorny/test-reporter@v1
       with:
         name: Tests
         working-directory: ${{ github.workspace }}/TestResults
@@ -82,7 +82,7 @@ jobs:
         output: 'both'
 
     - name: Get Pull Request information
-      uses: 8BitJonny/gh-get-current-pr@2.1.3
+      uses: 8BitJonny/gh-get-current-pr@3.0.0
       if: steps.codecoveragereport.outcome == 'success'
       id: PR
       with:
@@ -91,7 +91,7 @@ jobs:
         filterOutClosed: true
 
     - name: Add Coverage PR Comment
-      uses: marocchino/sticky-pull-request-comment@v2.3.0
+      uses: marocchino/sticky-pull-request-comment@v2
       if: steps.PR.outputs.number != '' && steps.PR.outcome == 'success'
       with:
         number: ${{ steps.PR.outputs.number }}

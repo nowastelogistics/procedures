@@ -55,12 +55,12 @@ jobs:
         fetch-depth: 0
 
     - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v1.1.1
+      uses: gittools/actions/gitversion/setup@v3.0.0
       with:
-        versionSpec: '5.x'
+        versionSpec: '6.x'
 
     - name: Determine Version
-      uses: gittools/actions/gitversion/execute@v1.1.1
+      uses: gittools/actions/gitversion/execute@v3.0.0
       with:
         useConfigFile: true
         configFilePath: GitVersion.yml
@@ -133,7 +133,7 @@ jobs:
         filterOutClosed: true
 
     - name: Add Coverage PR Comment
-      uses: marocchino/sticky-pull-request-comment@v2.3.0
+      uses: marocchino/sticky-pull-request-comment@v2
       if: steps.PR.outputs.number != '' && steps.PR.outcome == 'success'
       with:
         number: ${{ steps.PR.outputs.number }}
