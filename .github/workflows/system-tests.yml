@@ -25,14 +25,14 @@ jobs:
     runs-on: self-hosted
     steps:
     - name: Checkout source
-      uses: actions/checkout@v2.5.0
+      uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
     - name: Setup .NET Core SDK
-      uses: actions/setup-dotnet@v3.0.3
+      uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '7.0.x'
+        dotnet-version: '8.x'
 
     - name: Run System Tests
       id: test
@@ -57,7 +57,7 @@ jobs:
 #        fields: '{"customfield_10031": {"id": "10021","value": "Non billable"}}'
 
     - name: Upload System Tests Results
-      uses: dorny/test-reporter@v1.6.0
+      uses: dorny/test-reporter@v1
       with:
         name: System Tests Results
         working-directory: ${{ github.workspace }}\TestResults
