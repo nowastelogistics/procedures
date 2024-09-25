@@ -41,7 +41,7 @@ jobs:
         configFilePath: GitVersion.yml
 
     - name: Install Octopus CLI
-      uses: OctopusDeploy/install-octopus-cli-action@v1.2.0
+      uses: OctopusDeploy/install-octopus-cli-action@v3
       with:
         version: latest
 
@@ -68,10 +68,10 @@ jobs:
 
     - name: Write version information
       run: |
-        echo "{\"version\": \"${{ env.GITVERSION_NUGETVERSIONV2 }}\"}" > version.json
+        echo "{\"version\": \"${{ env.GitVersion_NuGetVersionV2 }}\"}" > version.json
 
     - name: Archive Release
-      uses: thedoctor0/zip-release@0.6.2
+      uses: thedoctor0/zip-release@0.7.5
       with:
         type: 'zip'
         filename: '${{ inputs.templates_name }}.zip'
@@ -79,13 +79,14 @@ jobs:
 
     - name: Octopus Create release
       run: |
-          octo pack --format="NuPkg" --id="${{ inputs.templates_name }}" --version="${{ env.GITVERSION_NUGETVERSIONV2 }}" --include="${{ inputs.templates_name }}.zip"
-          octo push --server="${{ secrets.octopus_server_url }}" --apiKey "${{ secrets.octopus_server_apikey }}" --space="Spaces-1" --package "${{ inputs.templates_name }}.${{ env.GITVERSION_NUGETVERSIONV2 }}.nupkg"
-          octo create-release --project "${{ inputs.templates_name }}" --version "${{ env.GITVERSION_NUGETVERSIONV2 }}" --packageVersion "${{ env.GITVERSION_NUGETVERSIONV2 }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --server "${{ secrets.octopus_server_url }}" --apiKey "${{ secrets.octopus_server_apikey }}"
+          octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
+          octopus package zip create --id "${{ inputs.templates_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}"
+          octopus package upload --space "Spaces-1" --package "${{ inputs.templates_name }}.${{ env.GitVersion_NuGetVersionV2 }}.zip"
+          octopus release create --space "Spaces-1" --project "${{ inputs.templates_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}"
 
           if ${{ steps.octopus-channel.outputs.autorelease }}; then
-            octo deploy-release --project "${{ inputs.templates_name }}" --version "${{ env.GITVERSION_NUGETVERSIONV2 }}" --deployTo "${{ steps.octopus-channel.outputs.channel }}" --server "${{ secrets.octopus_server_url }}" --apiKey "${{ secrets.octopus_server_apikey }}"
+            octopus deploy-release --project "${{ inputs.templates_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --deployTo "${{ steps.octopus-channel.outputs.channel }}"
           fi
 
           echo '### Template release' >> $GITHUB_STEP_SUMMARY
-          echo 'Pushed new release of template **${{ inputs.templates_name }}** version **${{ env.GITVERSION_NUGETVERSIONV2 }}** to Octopus' >> $GITHUB_STEP_SUMMARY
+          echo 'Pushed new release of template **${{ inputs.templates_name }}** version **${{ env.GitVersion_NuGetVersionV2 }}** to Octopus' >> $GITHUB_STEP_SUMMARY
