@@ -109,7 +109,7 @@ jobs:
           octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
           octopus package zip create --id "${{ inputs.templates_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --include *.zip
           octopus package upload --space "Spaces-1" --package "${{ inputs.templates_name }}.${{ env.GitVersion_NuGetVersionV2 }}.zip"
-          octopus release create --space "Spaces-1" --project "${{ inputs.templates_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.templates_name }}:${{ env.GitVersion_NuGetVersionV2 }}""
+          octopus release create --space "Spaces-1" --project "${{ inputs.templates_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.templates_name }}:${{ env.GitVersion_NuGetVersionV2 }}"
 
           if ${{ steps.octopus-channel.outputs.autorelease }}; then
             octopus deploy-release --project "${{ inputs.templates_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --deployTo "${{ steps.octopus-channel.outputs.channel }}"
