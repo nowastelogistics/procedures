@@ -101,13 +101,13 @@ jobs:
       with:
         type: 'zip'
         filename: '${{ inputs.templates_name }}.zip'
-        exclusions: '*.git* /*node_modules/* .editorconfig GitVersion.yml'
+        exclusions: '*.git* /*node_modules/* .editorconfig GitVersion.yml README.md .vscode*'
 
     - name: Octopus Create release
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
       run: |
           octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
-          octopus package zip create --id "${{ inputs.templates_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}"
+          octopus package zip create --id "${{ inputs.templates_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --include *.zip
           octopus package upload --space "Spaces-1" --package "${{ inputs.templates_name }}.${{ env.GitVersion_NuGetVersionV2 }}.zip"
           octopus release create --space "Spaces-1" --project "${{ inputs.templates_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}"
 
