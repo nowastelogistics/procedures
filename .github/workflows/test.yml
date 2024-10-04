@@ -6,9 +6,6 @@ on:
       project_test_file_path:
         required: false
         type: string
-      project_test_category:
-        required: false
-        type: string
     secrets:
         nuget_github_server_url:
           required: true
@@ -33,7 +30,7 @@ jobs:
 
     - name: Run tests
       id: test
-      run: dotnet test ${{ inputs.project_test_file_path }} --filter Category~"${{ inputs.project_test_category }}" --results-directory ./TestResults --logger "trx;LogFileName=ui-tests-results.trx" --logger "console;verbosity=normal"
+      run: dotnet test ${{ inputs.project_test_file_path }} --results-directory ./TestResults --logger "trx;LogFileName=ui-tests-results.trx" --logger "console;verbosity=normal"
 
     - name: Upload UI Tests Results
       uses: dorny/test-reporter@v1
