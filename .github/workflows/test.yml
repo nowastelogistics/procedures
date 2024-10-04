@@ -1,34 +1,46 @@
-name: TestRun
+name: Test
 
 on:
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      project_test_file_path:
+        required: false
+        type: string
+      project_test_category:
+        required: false
+        type: string
+    secrets:
+        nuget_github_server_url:
+          required: true
+        nuget_github_server_username:
+          required: true
+        nuget_github_server_password:
+          required: true
 
 jobs:
-  reusable_workflow_job:
-    uses: nowastelogistics/procedures/.github/workflows/docker.yml@master
-    with:
-      docker_file_path: Dockerfile
-      docker_image_name: imagename
-    secrets:
-      docker_server_url: ${{ secrets.DOCKER_GITHUB_URL }}
-      docker_server_username: ${{ github.repository_owner }}
-      docker_server_password: ${{ secrets.GITHUB_TOKEN }}
-      nuget_github_server_url: ${{ secrets.NUGET_GITHUB_URL }}
-      nuget_github_server_username: ${{ secrets.DOCKER_GITHUB_USERNAME }}
-      nuget_github_server_password: ${{ secrets.GITHUB_TOKEN }}
-      octopus_server_url: ${{ secrets.OCTOPUS_URL }}
-      octopus_server_apikey: ${{ secrets.OCTOPUS_APIKEY }}
+  build:
+    runs-on: self-hosted
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
+    - name: Setup .NET Core SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.x'
 
-  # test:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #   - name: Set up secret file
-  #     env:
-  #       DEBUG_PASSWORD: ${{ toJSON(github) }}
-  #       DEBUG_SECRET_KEY: ${{ toJSON(secrets) }}
-  #     run: |
-  #       echo $DEBUG_PASSWORD >> secrets.txt
-  #       echo $DEBUG_SECRET_KEY >> secrets2.txt
-  #   - name: view the secrets context
-  #     uses: mxschmitt/action-tmate@v3.7
+    - name: Run tests
+      id: test
+      run: dotnet test ${{ inputs.project_test_file_path }} --filter Category~"${{ inputs.project_test_category }}" --results-directory ./TestResults --logger "trx;LogFileName=ui-tests-results.trx" --logger "console;verbosity=normal"
+
+    - name: Upload UI Tests Results
+      uses: dorny/test-reporter@v1
+      with:
+        name: UI Tests Results
+        working-directory: ${{ github.workspace }}\TestResults
+        path: '*.trx'
+        reporter: dotnet-trx
+        max-annotations: '50'
+        token: ${{ secrets.GITHUB_TOKEN }}
