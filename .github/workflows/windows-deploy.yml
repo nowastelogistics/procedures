@@ -55,7 +55,7 @@ jobs:
     - name: Setup .NET Core SDK
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '8.0.x'
+        dotnet-version: '9.x'
 
     - name: Install Octopus CLI
       uses: OctopusDeploy/install-octopus-cli-action@v1.2.0
