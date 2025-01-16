@@ -57,7 +57,7 @@ jobs:
 
     - name: Install validation tool
       run: |
-        dotnet tool install NoEffect.Generator --prerelease --global
+        dotnet tool install NoEffect.Generator --global
 
     - name: Validate templates
       run: |
