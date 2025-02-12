@@ -64,8 +64,7 @@ jobs:
 
     - name: Prepare NuGet sources
       run: |
-        dotnet nuget list source | awk '/\[/ {$1=$NF=""; print $0}' | dotnet nuget remove source {}
-        dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }}
+        $nugetSources = dotnet nuget list source | Out-String; if(!($nugetSources -like "*github*")) { dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }} }
 
     - name: Run tests
       id: test
