@@ -70,10 +70,10 @@ jobs:
       id: test
       run: |
         if (${{ inputs.project_test_file_path }} -and "${{ inputs.project_test_file_path }}" -ne "") {
-            "tests-exists=true" | Out-File -Append -FilePath {{ $env:GITHUB_OUTPUT }}
+            "tests-exists=true" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
             dotnet test ${{ inputs.project_test_file_path }} --results-directory ./TestResults --logger "trx;LogFileName=test-results.trx"
         } else {
-            "exists=false" | Out-File -Append -FilePath {{ $env:GITHUB_OUTPUT }}
+            "exists=false" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
         }
 
     - name: Upload test results
@@ -95,21 +95,21 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
       id: octopus-channel
       run: |
-          "autorelease=false" | Out-File -Append -FilePath {{ $env:GITHUB_OUTPUT }}
+          "autorelease=false" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
 
           if ($env:GITHUB_REF -like 'refs/tags/*') {
-              "channel=Production" | Out-File -Append -FilePath {{ $env:GITHUB_OUTPUT }}
-              "notes=https://github.com/$env:GITHUB_REPOSITORY/releases/tag/$env:GITHUB_REF_NAME" | Out-File -Append -FilePath {{ $env:GITHUB_OUTPUT }}
+              "channel=Production" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
+              "notes=https://github.com/$env:GITHUB_REPOSITORY/releases/tag/$env:GITHUB_REF_NAME" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
 
               if ($env:INPUTS_OCTO_AUTO_RELEASE_PROD -eq "true") {
-                  "autorelease=true" | Out-File -Append -FilePath {{ $env:GITHUB_OUTPUT }}
+                  "autorelease=true" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
               }
           } else {
-              "channel=Development" | Out-File -Append -FilePath {{ $env:GITHUB_OUTPUT }}
-              "notes=https://github.com/$env:GITHUB_REPOSITORY/commit/$env:GITHUB_SHA" | Out-File -Append -FilePath {{ $env:GITHUB_OUTPUT }}
+              "channel=Development" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
+              "notes=https://github.com/$env:GITHUB_REPOSITORY/commit/$env:GITHUB_SHA" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
 
               if ($env:INPUTS_OCTO_AUTO_RELEASE_DEV -eq "true" -and $env:GITHUB_REF_NAME -like "refs/heads/release*") {
-                  "autorelease=true" | Out-File -Append -FilePath {{ $env:GITHUB_OUTPUT }}
+                  "autorelease=true" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
               }
           }
 
