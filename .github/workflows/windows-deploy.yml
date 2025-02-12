@@ -118,7 +118,7 @@ jobs:
     - name: Octopus Create release
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
       run: |
-        octopus login --server "$env:OCTOPUS_SERVER_URL" --api-key "$env:OCTOPUS_SERVER_APIKEY"
+        octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
         octopus package zip create --id "$env:INPUTS_DOCKER_IMAGE_NAME" --version "$env:GITVERSION_NUGETVERSIONV2" --base-path "nomad" --include "$env:INPUTS_DOCKER_IMAGE_NAME.*"
         octopus package upload --space "Spaces-1" --package "$env:INPUTS_DOCKER_IMAGE_NAME.$env:GITVERSION_NUGETVERSIONV2.zip"
         octopus release create --space "Spaces-1" --project "$env:INPUTS_DOCKER_IMAGE_NAME" --version "$env:GITVERSION_NUGETVERSIONV2" --channel "$env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_CHANNEL" --releaseNotes "$env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_NOTES" --package "$env:INPUTS_DOCKER_IMAGE_NAME`:$env:GITVERSION_NUGETVERSIONV2"
