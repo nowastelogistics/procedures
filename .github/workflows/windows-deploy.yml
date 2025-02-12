@@ -69,9 +69,9 @@ jobs:
     - name: Run tests
       id: test
       run: |
-        if ($env:INPUTS_PROJECT_TEST_FILE_PATH -and $env:INPUTS_PROJECT_TEST_FILE_PATH -ne "") {
+        if (${{ inputs.project_test_file_path }} -and ${{ inputs.project_test_file_path }} -ne "") {
             "tests-exists=true" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
-            dotnet test $env:INPUTS_PROJECT_TEST_FILE_PATH --results-directory ./TestResults --logger "trx;LogFileName=test-results.trx"
+            dotnet test ${{ inputs.project_test_file_path }} --results-directory ./TestResults --logger "trx;LogFileName=test-results.trx"
         } else {
             "exists=false" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
         }
@@ -90,7 +90,7 @@ jobs:
 
     - name: Build & Pack
       run: |
-        dotnet publish $env:INPUTS_PROJECT_FILE_PATH -p:Version=$env:GITVERSION_NUGETVERSIONV2 --configuration Release --output build --arch x64
+        dotnet publish ${{ inputs.project_file_path }} -p:Version=$env:GITVERSION_NUGETVERSIONV2 --configuration Release --output build --arch x64
 
     - name: Determine Octopus release branch
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
