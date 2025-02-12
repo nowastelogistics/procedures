@@ -118,7 +118,7 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
       run: |
         octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
-        octopus package zip create --id "${{ inputs.project_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --base-path "build" --include="**" --include="../nomad/${{ inputs.project_name }}.*"
+        octopus package zip create --id "${{ inputs.project_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --base-path "build" --include="**" --include="${{ github.workspace }}/nomad/${{ inputs.project_name }}.*"
         octopus package upload --space "Spaces-1" --package "${{ inputs.project_name }}.${{ env.GitVersion_NuGetVersionV2 }}.zip"
         octopus release create --space "Spaces-1" --project "${{ inputs.project_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.project_name }}:${{ env.GitVersion_NuGetVersionV2 }}"
 
