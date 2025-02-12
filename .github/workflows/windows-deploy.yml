@@ -89,7 +89,7 @@ jobs:
 
     - name: Build & Pack
       run: |
-        dotnet publish ${{ inputs.project_file_path }} -p:Version=$env:GITVERSION_NUGETVERSIONV2 --configuration Release --output build --arch x64
+        dotnet publish ${{ inputs.project_file_path }} -p:Version=$env:GitVersion_NuGetVersionV2 --configuration Release --output build --arch x64
 
     - name: Determine Octopus release branch
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
@@ -118,13 +118,13 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
       run: |
         octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
-        octopus package zip create --id "${{ inputs.docker_image_name }}" --version "$env:GITVERSION_NUGETVERSIONV2" --base-path "nomad" --include "${{ inputs.docker_image_name }}.*"
-        octopus package upload --space "Spaces-1" --package "${{ inputs.docker_image_name }}.$env:GITVERSION_NUGETVERSIONV2.zip"
-        octopus release create --space "Spaces-1" --project "${{ inputs.docker_image_name }}" --version "$env:GITVERSION_NUGETVERSIONV2" --channel "$env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_CHANNEL" --releaseNotes "$env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_NOTES" --package "${{ inputs.docker_image_name }}`:$env:GITVERSION_NUGETVERSIONV2"
+        octopus package zip create --id "${{ inputs.project_name }}" --version "$env:GitVersion_NuGetVersionV2" --base-path "nomad" --include "${{ inputs.project_name }}.*"
+        octopus package upload --space "Spaces-1" --package "${{ inputs.project_name }}.$env:GitVersion_NuGetVersionV2.zip"
+        octopus release create --space "Spaces-1" --project "${{ inputs.project_name }}" --version "$env:GitVersion_NuGetVersionV2" --channel "$env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_CHANNEL" --releaseNotes "$env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_NOTES" --package "${{ inputs.project_name }}`:$env:GitVersion_NuGetVersionV2"
 
         if ($env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_AUTORELEASE -eq "true") {
-            octopus deploy-release --project "${{ inputs.docker_image_name }}" --version "$env:GITVERSION_NUGETVERSIONV2" --tenant "*" --deployTo "$env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_CHANNEL"
+            octopus deploy-release --project "${{ inputs.project_name }}" --version "$env:GitVersion_NuGetVersionV2" --tenant "*" --deployTo "$env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_CHANNEL"
         }
 
         "### Octopus release" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
-        "Pushed new release of docker container **${{ inputs.docker_image_name }}** version **$env:GITVERSION_NUGETVERSIONV2** to Octopus" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
+        "Pushed new release of docker container **${{ inputs.project_name }}** version **$env:GitVersion_NuGetVersionV2** to Octopus" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
