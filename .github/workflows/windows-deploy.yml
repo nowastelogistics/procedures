@@ -120,10 +120,10 @@ jobs:
         octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
         octopus package zip create --id "${{ inputs.project_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --base-path "nomad" --include "${{ inputs.project_name }}.*"
         octopus package upload --space "Spaces-1" --package "${{ inputs.project_name }}.${{ env.GitVersion_NuGetVersionV2 }}.zip"
-        octopus release create --space "Spaces-1" --project "${{ inputs.project_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --channel "$env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_CHANNEL" --releaseNotes "$env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_NOTES" --package "${{ inputs.project_name }}`:$env:GitVersion_NuGetVersionV2"
+        octopus release create --space "Spaces-1" --project "${{ inputs.project_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --channel "${{ steps.octopus-channel.outputs.notes }}" --releaseNotes "$env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_NOTES" --package "${{ inputs.project_name }}:${{ env.GitVersion_NuGetVersionV2 }}"
 
         if ($env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_AUTORELEASE -eq "true") {
-            octopus deploy-release --project "${{ inputs.project_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --tenant "*" --deployTo "$env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_CHANNEL"
+            octopus deploy-release --project "${{ inputs.project_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --tenant "*" --deployTo "${{ steps.octopus-channel.outputs.notes }}"
         }
 
         "### Octopus release" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
