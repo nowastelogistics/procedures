@@ -95,37 +95,37 @@ jobs:
     - name: Determine Octopus release branch
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
       id: octopus-channel
-      shell: bash
       run: |
-          echo "autorelease=false" >> $GITHUB_OUTPUT
+          "autorelease=false" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
 
-          if [[ $GITHUB_REF == 'refs/tags/'* ]]; then
-            echo "channel=Production" >> $GITHUB_OUTPUT
-            echo "notes=https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
+          if ($env:GITHUB_REF -like 'refs/tags/*') {
+              "channel=Production" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
+              "notes=https://github.com/$env:GITHUB_REPOSITORY/releases/tag/$env:GITHUB_REF_NAME" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
 
-            if [[ ${{ inputs.octo_auto_release_prod }} == true ]]; then
-              echo "autorelease=true" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "channel=Development" >> $GITHUB_OUTPUT
-            echo "notes=https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA" >> $GITHUB_OUTPUT
+              if ($env:INPUTS_OCTO_AUTO_RELEASE_PROD -eq "true") {
+                  "autorelease=true" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
+              }
+          } else {
+              "channel=Development" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
+              "notes=https://github.com/$env:GITHUB_REPOSITORY/commit/$env:GITHUB_SHA" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
 
-            if [[ ${{ inputs.octo_auto_release_dev }} == true ]] && [[ $GITHUB_REF_NAME == "refs/heads/release"* ]]; then
-              echo "autorelease=true" >> $GITHUB_OUTPUT
-            fi
-          fi
+              if ($env:INPUTS_OCTO_AUTO_RELEASE_DEV -eq "true" -and $env:GITHUB_REF_NAME -like "refs/heads/release*") {
+                  "autorelease=true" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
+              }
+          }
+
 
     - name: Octopus Create release
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
       run: |
-          octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
-          octopus package zip create --id "${{ inputs.docker_image_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --base-path "nomad" --include "${{ inputs.docker_image_name }}.*"
-          octopus package upload --space "Spaces-1" --package "${{ inputs.docker_image_name }}.${{ env.GitVersion_NuGetVersionV2 }}.zip"
-          octopus release create --space "Spaces-1" --project "${{ inputs.docker_image_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.docker_image_name }}:${{ env.GitVersion_NuGetVersionV2 }}"
+        octopus login --server "$env:OCTOPUS_SERVER_URL" --api-key "$env:OCTOPUS_SERVER_APIKEY"
+        octopus package zip create --id "$env:INPUTS_DOCKER_IMAGE_NAME" --version "$env:GITVERSION_NUGETVERSIONV2" --base-path "nomad" --include "$env:INPUTS_DOCKER_IMAGE_NAME.*"
+        octopus package upload --space "Spaces-1" --package "$env:INPUTS_DOCKER_IMAGE_NAME.$env:GITVERSION_NUGETVERSIONV2.zip"
+        octopus release create --space "Spaces-1" --project "$env:INPUTS_DOCKER_IMAGE_NAME" --version "$env:GITVERSION_NUGETVERSIONV2" --channel "$env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_CHANNEL" --releaseNotes "$env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_NOTES" --package "$env:INPUTS_DOCKER_IMAGE_NAME`:$env:GITVERSION_NUGETVERSIONV2"
 
-          if ${{ steps.octopus-channel.outputs.autorelease }}; then
-            octopus deploy-release --project "${{ inputs.docker_image_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --tenant "*" --deployTo "${{ steps.octopus-channel.outputs.channel }}"
-          fi
+        if ($env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_AUTORELEASE -eq "true") {
+            octopus deploy-release --project "$env:INPUTS_DOCKER_IMAGE_NAME" --version "$env:GITVERSION_NUGETVERSIONV2" --tenant "*" --deployTo "$env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_CHANNEL"
+        }
 
-          echo '### Octopus release' >> $GITHUB_STEP_SUMMARY
-          echo 'Pushed new release of docker container **${{ inputs.docker_image_name }}** version **${{ env.GitVersion_NuGetVersionV2 }}** to Octopus' >> $GITHUB_STEP_SUMMARY
+        "### Octopus release" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
+        "Pushed new release of docker container **$env:INPUTS_DOCKER_IMAGE_NAME** version **$env:GITVERSION_NUGETVERSIONV2** to Octopus" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
