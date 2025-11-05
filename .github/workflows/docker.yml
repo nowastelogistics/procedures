@@ -77,7 +77,6 @@ jobs:
     - run: |
         echo "SemVer=${{ steps.gitversion.outputs.semVer }}"
         echo "SemVerFull=${{ steps.gitversion.outputs.fullSemVer }}"
-        echo "NuGetVersion=${{ steps.gitversion.outputs.nuGetVersion }}"
         echo "PreReleaseTag=${{ steps.gitversion.outputs.preReleaseTag }}"
         echo "PreReleaseLabel=${{ steps.gitversion.outputs.preReleaseLabel }}"
         echo "PreReleaseNumber=${{ steps.gitversion.outputs.preReleaseNumber }}"
