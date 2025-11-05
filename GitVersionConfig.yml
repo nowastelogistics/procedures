@@ -6,7 +6,7 @@ branches:
     mode: ContinuousDeployment
     label: rc
     increment: None
-    is-release-branch: true
+    is-release-branch: false   # don't force “stable” behaviour
   master:
     regex: ^master$|^main$
     mode: ContinuousDeployment
