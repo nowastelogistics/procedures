@@ -60,7 +60,7 @@ jobs:
         versionSpec: '6.x'
 
     - name: Download GitVersion config
-      run: curl -L https://github.com/nowastelogistics/procedures/blob/master/GitVersionConfig.yml -o GitVersionConfig.yml
+      run: curl -L https://raw.githubusercontent.com/nowastelogistics/procedures/master/GitVersionConfig.yml -o GitVersionConfig.yml
       
     - name: Show config with line numbers
       run: |
