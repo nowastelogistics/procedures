@@ -4,12 +4,12 @@ branches:
   master:
     regex: '^master$|^main$'
     mode: ContinuousDeployment
-    label: rc
+    label: 'rc'
     increment: Inherit
   develop:
     regex: '^dev(elop)?(ment)?$'
     mode: ContinuousDeployment
-    label: unstable
+    label: 'unstable'
     increment: Inherit
   feature:
     regex: '^features?[/-](?<BranchName>.+)$'
@@ -19,13 +19,14 @@ branches:
   hotfix:
     regex: '^hotfix(es)?[/-](?<BranchName>.+)$'
     mode: ContinuousDeployment
-    label: beta
+    label: 'beta'
     increment: None
   release:
-    regex: '^releases?[/-](?<BranchName>.+)$'
+    regex: '^releases?[/-](?<Version>\d+\.\d+\.\d+)$'
     mode: ContinuousDeployment
-    label: rc
-    increment: Inherit
+    label: 'rc'
+    increment: None
+    is-release-branch: true
 ignore:
   sha: []
 merge-message-formats: {}
