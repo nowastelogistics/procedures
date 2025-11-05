@@ -2,7 +2,7 @@ mode: ContinuousDelivery
 assembly-informational-format: '{Major}.{Minor}.{Patch}-{PreReleaseLabel}-{ShortSha}'
 branches:
   release:
-    regex: '^releases?[/-](?<Version>\d+\.\d+\.\d+)$'
+    regex: '^releases?[/-](?<Version>\d+\.\d+\.\d+)'
     mode: ContinuousDelivery
     label: rc
     increment: None
