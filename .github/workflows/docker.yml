@@ -55,15 +55,31 @@ jobs:
         fetch-depth: 0
 
     - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v3.0.0
+      uses: gittools/actions/gitversion/setup@v4.2.0
       with:
-        versionSpec: '5.x'
+        versionSpec: '6.x'
+
+    - name: Download GitVersion config
+      run: curl -L https://raw.githubusercontent.com/nowastelogistics/procedures/master/GitVersionConfig.yml -o GitVersionConfig.yml
+      
+    - name: Show config with line numbers
+      run: |
+        nl -ba GitVersionConfig.yml | sed -n '1,120p'
 
     - name: Determine Version
-      uses: gittools/actions/gitversion/execute@v3.0.0
+      id: gitv
+      uses: gittools/actions/gitversion/execute@v4.2.0
       with:
         useConfigFile: true
-        configFilePath: GitVersion.yml
+        configFilePath: GitVersionConfig.yml
+        additionalArguments: '/diag /nocache' 
+        
+    - run: |
+        echo "SemVer=${{ gitv.semVer }}"
+        echo "SemVerFull=${{ gitv.fullSemVer }}"
+        echo "SemVerasdf=${{ steps.gitversion.outputs.semVer }}"
+        echo "NuGetVersionV2=${{ steps.gitversion.outputs.nuGetVersionV2 }}"
+        echo "Test=${{ env.GitVersion_NuGetVersionV2 }}"
 
     - name: Cache Docker layers
       id: docker-cache
