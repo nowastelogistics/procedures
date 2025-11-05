@@ -67,6 +67,7 @@ jobs:
 
     - name: Cache Docker layers
       id: docker-cache
+      uses: actions/cache@v4
       with:
         path: /tmp/.docker-cache
         key: ${{ runner.os }}-docker-${{ hashFiles(inputs.docker_file_path) }}
