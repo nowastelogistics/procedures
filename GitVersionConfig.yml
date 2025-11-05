@@ -1,0 +1,32 @@
+mode: ContinuousDeployment
+assembly-informational-format: '{Major}.{Minor}.{Patch}-{PreReleaseLabel}-{ShortSha}'
+branches:
+  master:
+    regex: ^master$|^main$
+    mode: ContinuousDeployment
+    tag: rc
+    increment: Inherit
+  develop:
+    regex: dev(elop)?(ment)?$
+    mode: ContinuousDeployment
+    tag: unstable
+    increment: None
+  feature:
+    regex: feature(s)?[/-]
+    mode: ContinuousDeployment
+    tag: useBranchName
+    increment: None
+  hotfix:
+    regex: hotfix(es)?[/-]
+    mode: ContinuousDeployment
+    tag: beta
+    increment: None
+  release:
+    regex: release(s)?[/-]
+    tag-number-pattern: '((0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))'
+    mode: ContinuousDeployment
+    tag: rc
+    increment: None
+ignore:
+  sha: []
+merge-message-formats: {}
