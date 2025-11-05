@@ -10,12 +10,12 @@ branches:
     regex: '^dev(elop)?(ment)?$'
     mode: ContinuousDeployment
     label: unstable
-    increment: None
+    increment: Inherit
   feature:
     regex: '^features?[/-](?<BranchName>.+)$'
     mode: ContinuousDeployment
     label: '{BranchName}'
-    increment: None
+    increment: Inherit
   hotfix:
     regex: '^hotfix(es)?[/-](?<BranchName>.+)$'
     mode: ContinuousDeployment
@@ -25,7 +25,7 @@ branches:
     regex: '^releases?[/-](?<BranchName>.+)$'
     mode: ContinuousDeployment
     label: rc
-    increment: None
+    increment: Inherit
 ignore:
   sha: []
 merge-message-formats: {}
