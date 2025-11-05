@@ -55,28 +55,15 @@ jobs:
         fetch-depth: 0
 
     - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v4.2.0
+      uses: gittools/actions/gitversion/setup@v3.0.0
       with:
-        versionSpec: '6.x'
-
-    - name: Download GitVersion config
-      run: curl -L https://raw.githubusercontent.com/nowastelogistics/procedures/master/GitVersionConfig.yml -o GitVersionConfig.yml
-      
-    - name: Show config with line numbers
-      run: |
-        nl -ba GitVersionConfig.yml | sed -n '1,120p'
+        versionSpec: '5.x'
 
     - name: Determine Version
-      id: gitversion
-      uses: gittools/actions/gitversion/execute@v4.2.0
+      uses: gittools/actions/gitversion/execute@v3.0.0
       with:
         useConfigFile: true
-        configFilePath: GitVersionConfig.yml
-        additionalArguments: '/diag /nocache' 
-        
-    - run: |
-        echo "SemVer=${{ steps.gitversion.outputs.semVer }}"
-        echo "SemVerFull=${{ steps.gitversion.outputs.fullSemVer }}"
+        configFilePath: GitVersion.yml
 
     - name: Cache Docker layers
       id: docker-cache
@@ -98,17 +85,17 @@ jobs:
             --build-arg NUGET_GITHUB_SERVER_URL=${{ secrets.nuget_github_server_url }}
             --build-arg NUGET_GITHUB_SERVER_USERNAME=${{ secrets.nuget_github_server_username }}
             --build-arg NUGET_GITHUB_SERVER_PASSWORD=${{ secrets.nuget_github_server_password }}
-            --build-arg GITVERSION=${{ steps.gitversion.outputs.semVer }}
+            --build-arg GITVERSION=${{ env.GitVersion_NuGetVersionV2 }}
             --output type=docker
             --file ${{ inputs.docker_file_path }}
             --cache-from type=local,src=/tmp/.docker-cache
             --cache-to type=local,dest=/tmp/.docker-cache
-            --tag ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ steps.gitversion.outputs.semVer }} .
+            --tag ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ env.GitVersion_NuGetVersionV2 }} .
 
     - name: Extract test results
       if: inputs.docker_has_tests == true
       run: |
-            docker create -ti --name dummy ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ steps.gitversion.outputs.semVer }} bash
+            docker create -ti --name dummy ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ env.GitVersion_NuGetVersionV2 }} bash
             docker cp dummy:/TestResults/. ./TestResults
 
             if [[ ${{ inputs.docker_has_code_coverage }} == true ]]; then
@@ -164,13 +151,13 @@ jobs:
     - name: Docker Upload & Release - latest
       if: startsWith(github.ref, 'refs/tags/')
       run: |
-          docker tag ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ steps.gitversion.outputs.semVer }} ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:latest
+          docker tag ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ env.GitVersion_NuGetVersionV2 }} ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:latest
           docker push ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:latest
 
     - name: Docker Upload & Release - build
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
       run: |
-          docker push ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ steps.gitversion.outputs.semVer }}
+          docker push ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ env.GitVersion_NuGetVersionV2 }}
 
     - name: Install Octopus CLI
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
@@ -204,13 +191,13 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
       run: |
           octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
-          octopus package zip create --id "${{ inputs.docker_image_name }}" --version "${{ steps.gitversion.outputs.semVer }}" --base-path "nomad" --include "${{ inputs.docker_image_name }}.*"
-          octopus package upload --space "Spaces-1" --package "${{ inputs.docker_image_name }}.${{ steps.gitversion.outputs.semVer }}.zip"
-          octopus release create --space "Spaces-1" --project "${{ inputs.docker_image_name }}" --version "${{ steps.gitversion.outputs.semVer }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.docker_image_name }}:${{ steps.gitversion.outputs.semVer }}"
+          octopus package zip create --id "${{ inputs.docker_image_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --base-path "nomad" --include "${{ inputs.docker_image_name }}.*"
+          octopus package upload --space "Spaces-1" --package "${{ inputs.docker_image_name }}.${{ env.GitVersion_NuGetVersionV2 }}.zip"
+          octopus release create --space "Spaces-1" --project "${{ inputs.docker_image_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.docker_image_name }}:${{ env.GitVersion_NuGetVersionV2 }}"
 
           if ${{ steps.octopus-channel.outputs.autorelease }}; then
-            octopus deploy-release --project "${{ inputs.docker_image_name }}" --version "${{ steps.gitversion.outputs.semVer }}" --tenant "*" --deployTo "${{ steps.octopus-channel.outputs.channel }}"
+            octopus deploy-release --project "${{ inputs.docker_image_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --tenant "*" --deployTo "${{ steps.octopus-channel.outputs.channel }}"
           fi
 
           echo '### Octopus release' >> $GITHUB_STEP_SUMMARY
-          echo 'Pushed new release of docker container **${{ inputs.docker_image_name }}** version **${{ steps.gitversion.outputs.semVer }}** to Octopus' >> $GITHUB_STEP_SUMMARY
+          echo 'Pushed new release of docker container **${{ inputs.docker_image_name }}** version **${{ env.GitVersion_NuGetVersionV2 }}** to Octopus' >> $GITHUB_STEP_SUMMARY
