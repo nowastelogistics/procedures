@@ -3,9 +3,9 @@ assembly-informational-format: '{Major}.{Minor}.{Patch}-{PreReleaseLabel}-{Short
 branches:
   release:
     regex: '^releases?[/-](?<Version>\d+\.\d+\.\d+)$'
-    mode: ContinuousDeployment
+    mode: ContinuousDelivery
     label: rc
-    increment: None
+    increment: Inherit
     is-release-branch: false   # don't force “stable” behaviour
   master:
     regex: ^master$|^main$
@@ -15,17 +15,17 @@ branches:
     is-release-branch: true
   develop:
     regex: dev(elop)?(ment)?$
-    mode: ContinuousDeployment
+    mode: ContinuousDelivery
     label: unstable
     increment: Inherit
   feature:
     regex: feature(s)?[/-]
-    mode: ContinuousDeployment
+    mode: ContinuousDelivery
     label: '{BranchName}'
     increment: Inherit
   hotfix:
     regex: hotfix(es)?[/-]
-    mode: ContinuousDeployment
+    mode: ContinuousDelivery
     label: beta
     increment: None
 ignore:
