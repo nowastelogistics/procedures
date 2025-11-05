@@ -21,7 +21,7 @@ branches:
   feature:
     regex: feature(s)?[/-]
     mode: ContinuousDelivery
-    label: '{BranchName}'
+    label: 'feature'
     increment: Inherit
   hotfix:
     regex: hotfix(es)?[/-]
