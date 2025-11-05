@@ -1,31 +1,32 @@
 mode: ContinuousDeployment
-assembly-informational-format: '{Major}.{Minor}.{Patch}-{PreReleasetag-prefix}-{ShortSha}'
+assembly-informational-format: '{Major}.{Minor}.{Patch}-{PreReleaseLabel}-{ShortSha}'
 branches:
   master:
     regex: '^master$|^main$'
     mode: ContinuousDeployment
-    tag-prefix: 'rc'
+    label: ''
     increment: Inherit
+    is-release-branch: true
   develop:
     regex: '^dev(elop)?(ment)?$'
     mode: ContinuousDeployment
-    tag-prefix: 'unstable'
+    label: unstable
     increment: Inherit
   feature:
     regex: '^features?[/-](?<BranchName>.+)$'
     mode: ContinuousDeployment
-    tag-prefix: '{BranchName}'
+    label: '{BranchName}'
     increment: Inherit
   hotfix:
     regex: '^hotfix(es)?[/-](?<BranchName>.+)$'
     mode: ContinuousDeployment
-    tag-prefix: 'beta'
+    label: beta
     increment: None
   release:
-    regex: '^releases?[/-](?<Version>\d+\.\d+\.\d+)$'
+    regex: '^releases?[/-](?<BranchName>.+)$'
     mode: ContinuousDeployment
-    tag-prefix: 'rc'
-    increment: None
+    label: rc
+    increment: Inherit
     is-release-branch: true
 ignore:
   sha: []
