@@ -4,28 +4,28 @@ branches:
   master:
     regex: ^master$|^main$
     mode: ContinuousDeployment
-    tag: rc
+    tag-prefix: rc
     increment: Inherit
   develop:
     regex: dev(elop)?(ment)?$
     mode: ContinuousDeployment
-    tag: unstable
+    tag-prefix: unstable
     increment: None
   feature:
     regex: feature(s)?[/-]
     mode: ContinuousDeployment
-    tag: useBranchName
+    tag-prefix: useBranchName
     increment: None
   hotfix:
     regex: hotfix(es)?[/-]
     mode: ContinuousDeployment
-    tag: beta
+    tag-prefix: beta
     increment: None
   release:
     regex: release(s)?[/-]
-    tag-number-pattern: '((0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))'
+    tag-prefix-number-pattern: '((0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*))'
     mode: ContinuousDeployment
-    tag: rc
+    tag-prefix: rc
     increment: None
 ignore:
   sha: []
