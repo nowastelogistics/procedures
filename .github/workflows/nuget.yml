@@ -30,15 +30,42 @@ jobs:
         fetch-depth: 0
 
     - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v3.0.0
+      uses: gittools/actions/gitversion/setup@v4.2.0
       with:
-        versionSpec: '5.x'
+        versionSpec: '6.x'
+
+    - name: Download GitVersion config
+      run: curl -L https://raw.githubusercontent.com/nowastelogistics/procedures/master/GitVersionConfig.yml -o GitVersionConfig.yml
 
     - name: Determine Version
-      uses: gittools/actions/gitversion/execute@v3.0.0
+      id: gitversion
+      uses: gittools/actions/gitversion/execute@v4.2.0
       with:
         useConfigFile: true
-        configFilePath: GitVersion.yml
+        configFilePath: GitVersionConfig.yml
+        additionalArguments: '/diag /nocache' 
+        
+    # Custom version format to match Docker / NuGet requirements. nuGetVersionV2 was removed from GitVersion v6
+    - name: Build custom version
+      id: version
+      run: |
+        major='${{ steps.gitversion.outputs.major }}'
+        minor='${{ steps.gitversion.outputs.minor }}'
+        patch='${{ steps.gitversion.outputs.patch }}'
+        label='${{ steps.gitversion.outputs.preReleaseLabel }}'
+        number='${{ steps.gitversion.outputs.commitsSinceVersionSource }}'
+
+        # zero-pad number to 5 digits (NuGet style)
+        padded=$(printf "%05d" "${number:-0}")
+
+        if [ -z "$label" ]; then
+          version="${major}.${minor}.${patch}"
+        else
+          version="${major}.${minor}.${patch}-${label}${padded}"
+        fi
+
+        echo "GITVERSION=$version" >> "$GITHUB_ENV"
+        echo "Computed version: $version"
 
     - name: Setup .NET Core SDK
       uses: actions/setup-dotnet@v4
@@ -99,13 +126,13 @@ jobs:
 
     - name: Build & Pack NuGet
       run: |
-        dotnet build ${{ inputs.project_file_path }} -p:Version=${{ env.GitVersion_NuGetVersionV2 }} --configuration Release
-        dotnet pack ${{ inputs.project_file_path }} -p:Version=${{ env.GitVersion_NuGetVersionV2 }} --configuration Release --output nupkgs
+        dotnet build ${{ inputs.project_file_path }} -p:Version=${{ env.GITVERSION }} --configuration Release
+        dotnet pack ${{ inputs.project_file_path }} -p:Version=${{ env.GITVERSION }} --configuration Release --output nupkgs
 
     - name: Create NuGet release
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
       run: |
-        dotnet nuget push nupkgs/${{ inputs.project_nuget_name }}.${{ env.GitVersion_NuGetVersionV2 }}.nupkg --api-key ${{ secrets.nuget_github_server_password }} --source github --skip-duplicate
+        dotnet nuget push nupkgs/${{ inputs.project_nuget_name }}.${{ env.GITVERSION }}.nupkg --api-key ${{ secrets.nuget_github_server_password }} --source github --skip-duplicate
 
         echo '### NuGet package' >> $GITHUB_STEP_SUMMARY
-        echo 'Pushed new release of package **${{ inputs.project_nuget_name }}** version **${{ env.GitVersion_NuGetVersionV2 }}** to feed' >> $GITHUB_STEP_SUMMARY
+        echo 'Pushed new release of package **${{ inputs.project_nuget_name }}** version **${{ env.GITVERSION }}** to feed' >> $GITHUB_STEP_SUMMARY

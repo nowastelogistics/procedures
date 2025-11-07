@@ -42,15 +42,42 @@ jobs:
         fetch-depth: 0
 
     - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v3.0.0
+      uses: gittools/actions/gitversion/setup@v4.2.0
       with:
-        versionSpec: '5.x'
+        versionSpec: '6.x'
+
+    - name: Download GitVersion config
+      run: curl -L https://raw.githubusercontent.com/nowastelogistics/procedures/master/GitVersionConfig.yml -o GitVersionConfig.yml
 
     - name: Determine Version
-      uses: gittools/actions/gitversion/execute@v3.0.0
+      id: gitversion
+      uses: gittools/actions/gitversion/execute@v4.2.0
       with:
         useConfigFile: true
-        configFilePath: GitVersion.yml
+        configFilePath: GitVersionConfig.yml
+        additionalArguments: '/diag /nocache' 
+        
+    # Custom version format to match Docker / NuGet requirements. nuGetVersionV2 was removed from GitVersion v6
+    - name: Build custom version
+      id: version
+      run: |
+        major='${{ steps.gitversion.outputs.major }}'
+        minor='${{ steps.gitversion.outputs.minor }}'
+        patch='${{ steps.gitversion.outputs.patch }}'
+        label='${{ steps.gitversion.outputs.preReleaseLabel }}'
+        number='${{ steps.gitversion.outputs.commitsSinceVersionSource }}'
+
+        # zero-pad number to 5 digits (NuGet style)
+        padded=$(printf "%05d" "${number:-0}")
+
+        if [ -z "$label" ]; then
+          version="${major}.${minor}.${patch}"
+        else
+          version="${major}.${minor}.${patch}-${label}${padded}"
+        fi
+
+        echo "GITVERSION=$version" >> "$GITHUB_ENV"
+        echo "Computed version: $version"
 
     - name: Setup .NET Core SDK
       uses: actions/setup-dotnet@v4
@@ -89,7 +116,7 @@ jobs:
 
     - name: Build & Pack
       run: |
-        dotnet publish ${{ inputs.project_file_path }} -p:Version=${{ env.GitVersion_NuGetVersionV2 }} --configuration Release --output build --arch x64
+        dotnet publish ${{ inputs.project_file_path }} -p:Version=${{ env.GITVERSION }} --configuration Release --output build --arch x64
         mv nomad/${{ inputs.project_name }}.* build/
 
     - name: Determine Octopus release branch
@@ -119,12 +146,12 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
       run: |
         octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
-        octopus package zip create --id "${{ inputs.project_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --base-path "build" --include="**"
-        octopus package upload --space "Spaces-1" --package "${{ inputs.project_name }}.${{ env.GitVersion_NuGetVersionV2 }}.zip"
-        octopus release create --space "Spaces-1" --project "${{ inputs.project_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.project_name }}:${{ env.GitVersion_NuGetVersionV2 }}"
+        octopus package zip create --id "${{ inputs.project_name }}" --version "${{ env.GITVERSION }}" --base-path "build" --include="**"
+        octopus package upload --space "Spaces-1" --package "${{ inputs.project_name }}.${{ env.GITVERSION }}.zip"
+        octopus release create --space "Spaces-1" --project "${{ inputs.project_name }}" --version "${{ env.GITVERSION }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.project_name }}:${{ env.GITVERSION }}"
 
         if ($env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_AUTORELEASE -eq "true") {
-            octopus deploy-release --project "${{ inputs.project_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --tenant "*" --deployTo "${{ steps.octopus-channel.outputs.channel }}"
+            octopus deploy-release --project "${{ inputs.project_name }}" --version "${{ env.GITVERSION }}" --tenant "*" --deployTo "${{ steps.octopus-channel.outputs.channel }}"
         }
 
         "### Octopus release" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
