@@ -34,12 +34,9 @@ jobs:
       with:
         versionSpec: '6.x'
 
-    - name: Download GitVersion config
-      shell: pwsh
+    - name: Download GitVersion config (force real curl)
       run: |
-        Invoke-WebRequest `
-          -Uri "https://raw.githubusercontent.com/nowastelogistics/procedures/master/GitVersionConfig.yml" `
-          -OutFile "GitVersionConfig.yml"
+        C:\Windows\System32\curl.exe -L https://raw.githubusercontent.com/nowastelogistics/procedures/master/GitVersionConfig.yml -o GitVersionConfig.yml
 
     - name: Determine Version
       id: gitversion
