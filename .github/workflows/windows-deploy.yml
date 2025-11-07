@@ -58,27 +58,44 @@ jobs:
         configFilePath: GitVersionConfig.yml
         additionalArguments: '/diag /nocache' 
         
-    # Custom version format to match Docker / NuGet requirements. nuGetVersionV2 was removed from GitVersion v6
-    - name: Build custom version
-      id: version
+    - name: Build custom version (Windows / cmd)
+      shell: cmd
       run: |
-        major='${{ steps.gitversion.outputs.major }}'
-        minor='${{ steps.gitversion.outputs.minor }}'
-        patch='${{ steps.gitversion.outputs.patch }}'
-        label='${{ steps.gitversion.outputs.preReleaseLabel }}'
-        number='${{ steps.gitversion.outputs.commitsSinceVersionSource }}'
+        @echo off
+        setlocal enabledelayedexpansion
 
-        # zero-pad number to 5 digits (NuGet style)
-        padded=$(printf "%05d" "${number:-0}")
+        rem === Extract GitVersion outputs ===
+        set major=${{ steps.gitversion.outputs.major }}
+        set minor=${{ steps.gitversion.outputs.minor }}
+        set patch=${{ steps.gitversion.outputs.patch }}
+        set label=${{ steps.gitversion.outputs.preReleaseLabel }}
+        set number=${{ steps.gitversion.outputs.preReleaseNumber }}
+        if "%number%"=="" set number=${{ steps.gitversion.outputs.commitsSinceVersionSource }}
 
-        if [ -z "$label" ]; then
-          version="${major}.${minor}.${patch}"
-        else
-          version="${major}.${minor}.${patch}-${label}${padded}"
-        fi
+        rem === If label is empty and we are on a release/* branch, force rc ===
+        set branch=%GITHUB_REF_NAME%
+        echo Branch is %branch%
+        echo Label before check: %label%
+        echo Number before check: %number%
+        echo.
+        echo.
 
-        echo "GITVERSION=$version" >> "$GITHUB_ENV"
-        echo "Computed version: $version"
+        rem === Zero-pad to 5 digits ===
+        set padded=00000%number%
+        set padded=%padded:~-5%
+
+        rem === Build version string ===
+        if "%label%"=="" (
+          set version=%major%.%minor%.%patch%
+        ) else (
+          set version=%major%.%minor%.%patch%-%label%%padded%
+        )
+
+        echo Computed version: %version%
+
+        rem === Export to GITHUB_ENV ===
+        echo GITVERSION=%version%>> %GITHUB_ENV%
+
 
     - name: Setup .NET Core SDK
       uses: actions/setup-dotnet@v4
