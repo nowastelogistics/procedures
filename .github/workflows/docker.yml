@@ -161,17 +161,18 @@ jobs:
       uses: insightsengineering/coverage-action@v3
       with:
         path: TestResults/coverage.cobertura.xml
-        format: cobertura
-        github-token: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ secrets.GITHUB_TOKEN }}
         publish: false
         fail: false
+        exclude-detailed-coverage: true
+        togglable-report: true
 
     - name: Write coverage markdown
       if: inputs.docker_has_code_coverage == true && steps.coverage.outcome == 'success'
       run: |
-        cat > code-coverage-results.md <<'EOF'
-        ${{ steps.coverage.outputs.summary }}
-        EOF
+        printf "%s\n" "${{ steps.coverage.outputs.summary }}" > code-coverage-results.md
+        wc -c code-coverage-results.md
+        sed -n '1,40p' code-coverage-results.md
 
     - name: Get Pull Request information
       uses: 8BitJonny/gh-get-current-pr@3.0.0
