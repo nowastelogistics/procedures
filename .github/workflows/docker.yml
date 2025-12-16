@@ -156,14 +156,39 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Coverage summary
+      id: coverage
       if: inputs.docker_has_code_coverage == true && hashFiles('TestResults/*.xml') != ''
       uses: insightsengineering/coverage-action@v3
       with:
         path: TestResults/coverage.cobertura.xml
         format: cobertura
         github-token: ${{ secrets.GITHUB_TOKEN }}
-        publish: true
+        publish: false
         fail: false
+
+    - name: Write coverage markdown
+      if: inputs.docker_has_code_coverage == true && steps.coverage.outcome == 'success'
+      run: |
+        cat > code-coverage-results.md <<'EOF'
+        ${{ steps.coverage.outputs.summary }}
+        EOF
+
+    - name: Get Pull Request information
+      uses: 8BitJonny/gh-get-current-pr@3.0.0
+      if: inputs.docker_has_code_coverage == true && steps.coverage.outcome == 'success'
+      id: pr
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        sha: ${{ github.event.pull_request.head.sha }}
+        filterOutClosed: true
+
+    - name: Add Coverage PR Comment
+      uses: marocchino/sticky-pull-request-comment@v2
+      if: inputs.docker_has_code_coverage == true && steps.pr.outputs.number != ''
+      with:
+        number: ${{ steps.pr.outputs.number }}
+        recreate: true
+        path: code-coverage-results.md
 
     - name: Docker Login
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
