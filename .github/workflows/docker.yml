@@ -162,10 +162,11 @@ jobs:
       with:
         path: TestResults/coverage.cobertura.xml
         token: ${{ secrets.GITHUB_TOKEN }}
-        publish: false
+        publish: true
         fail: false
         exclude-detailed-coverage: true
         togglable-report: true
+        diff: false
 
     - name: Write coverage markdown
       if: inputs.docker_has_code_coverage == true && steps.coverage.outcome == 'success'
