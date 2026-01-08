@@ -1,0 +1,93 @@
+name: Label zip
+
+on:
+  workflow_call:
+    inputs:
+      label_name:
+        required: true
+        type: string
+      octo_auto_release_dev:
+        required: false
+        type: boolean
+        default: false
+      octo_auto_release_prod:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      octopus_server_url:
+        required: true
+      octopus_server_apikey:
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install GitVersion
+      uses: gittools/actions/gitversion/setup@v3.0.0
+      with:
+        versionSpec: '5.x'
+
+    - name: Determine Version
+      uses: gittools/actions/gitversion/execute@v3.0.0
+      with:
+        useConfigFile: true
+        configFilePath: GitVersion.yml
+
+    - name: Install Octopus CLI
+      uses: OctopusDeploy/install-octopus-cli-action@v3
+      with:
+        version: latest
+
+    - name: Determine Octopus release branch
+      id: octopus-channel
+      run: |
+          echo "autorelease=false" >> $GITHUB_OUTPUT
+
+          if [[ $GITHUB_REF == 'refs/tags/'* ]]; then
+            echo "channel=Production" >> $GITHUB_OUTPUT
+            echo "notes=https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
+
+            if [[ ${{ inputs.octo_auto_release_prod }} == true ]]; then
+              echo "autorelease=true" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "channel=Development" >> $GITHUB_OUTPUT
+            echo "notes=https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA" >> $GITHUB_OUTPUT
+
+            if [[ ${{ inputs.octo_auto_release_dev }} == true ]] && [[ $GITHUB_REF_NAME == "refs/heads/release"* ]]; then
+              echo "autorelease=true" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+    - name: Write version information
+      run: |
+        echo "{\"version\": \"${{ env.GitVersion_NuGetVersionV2 }}\"}" > version.json
+        echo "{\"version\": \"${{ env.GitVersion_NuGetVersionV2 }}\"}" > default/version.json
+
+    - name: Archive Release
+      uses: thedoctor0/zip-release@0.7.5
+      with:
+        type: 'zip'
+        filename: '${{ inputs.label_name }}.zip'
+        exclusions: '*.git* /*node_modules/* .editorconfig GitVersion.yml'
+
+    - name: Octopus Create release
+      run: |
+          octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
+          octopus package zip create --id "${{ inputs.label_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}"
+          octopus package upload --space "Spaces-1" --package "${{ inputs.label_name }}.${{ env.GitVersion_NuGetVersionV2 }}.zip"
+          octopus release create --space "Spaces-1" --project "${{ inputs.label_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.label_name }}:${{ env.GitVersion_NuGetVersionV2 }}"
+
+          if ${{ steps.octopus-channel.outputs.autorelease }}; then
+            octopus deploy-release --project "${{ inputs.label_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --deployTo "${{ steps.octopus-channel.outputs.channel }}"
+          fi
+
+          echo '### Template release' >> $GITHUB_STEP_SUMMARY
+          echo 'Pushed new release of template **${{ inputs.label_name }}** version **${{ env.GitVersion_NuGetVersionV2 }}** to Octopus' >> $GITHUB_STEP_SUMMARY
