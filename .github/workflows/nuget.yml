@@ -22,7 +22,10 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Self-hosted runner on Kubernetes
+    runs-on: [self-hosted, k8s]
+    # Hosted runner
+    # runs-on: ubuntu-latest
     steps:
     - name: Checkout source
       uses: actions/checkout@v4
