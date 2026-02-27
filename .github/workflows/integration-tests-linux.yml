@@ -29,6 +29,10 @@ jobs:
       with:
         dotnet-version: '10.x'
 
+    - name: Prepare NuGet sources
+      run: |
+        dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }}
+
     - name: Run Integration Tests
       id: test
       run: dotnet test ${{ inputs.project_test_file_path }} --results-directory ./TestResults --logger "trx;LogFileName=integration-tests-results.trx"
