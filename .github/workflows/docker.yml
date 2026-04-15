@@ -276,6 +276,24 @@ jobs:
       run: |
         cosign sign --yes "$IMAGE_REF"
 
+    - name: Generate SBOM
+      uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+      with:
+        image: ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}@${{ needs.build.outputs.image_digest }}
+        registry-username: ${{ secrets.docker_server_username }}
+        registry-password: ${{ secrets.docker_server_password }}
+        format: spdx-json
+        syft-version: v1.42.4
+        artifact-name: ${{ inputs.docker_image_name }}-sbom-${{ needs.build.outputs.gitversion }}
+        output-file: ${{ github.workspace }}/${{ inputs.docker_image_name }}-sbom.spdx.json
+
+    - name: Attach SBOM attestation
+      env:
+        IMAGE_REF: ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}@${{ needs.build.outputs.image_digest }}
+        SBOM_FILE: ${{ github.workspace }}/${{ inputs.docker_image_name }}-sbom.spdx.json
+      run: |
+        cosign attest --yes --predicate "$SBOM_FILE" --type spdxjson "$IMAGE_REF"
+
     - name: Install Octopus CLI
       uses: OctopusDeploy/install-octopus-cli-action@53672953fdc83eef118faf7ac9f15638424bdd3f # v4.1.0
       with:
