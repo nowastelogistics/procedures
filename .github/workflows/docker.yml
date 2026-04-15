@@ -50,6 +50,7 @@ jobs:
     permissions:
       contents: write
       checks: write
+      packages: write
       pull-requests: write
 
     steps:
