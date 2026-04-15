@@ -47,6 +47,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    outputs:
+      gitversion: ${{ steps.version.outputs.gitversion }}
+      image_digest: ${{ steps.publish.outputs.digest }}
     permissions:
       contents: write
       checks: write
@@ -110,6 +113,7 @@ jobs:
         fi
 
         echo "GITVERSION=$version" >> "$GITHUB_ENV"
+        echo "gitversion=$version" >> "$GITHUB_OUTPUT"
         echo "Computed version: $version"
 
     - name: Cache Docker layers
@@ -206,25 +210,73 @@ jobs:
         username: ${{ secrets.docker_server_username }}
         password: ${{ secrets.docker_server_password }}
 
-    - name: Docker Upload & Release - latest
-      if: startsWith(github.ref, 'refs/tags/')
-      run: |
-          docker tag ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ env.GITVERSION }} ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:latest
-          docker push ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:latest
-
-    - name: Docker Upload & Release - build
+    - name: Compute publish tags
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+      id: image
       run: |
-          docker push ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ env.GITVERSION }}
+          image_repo="${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}"
+          echo "repo=$image_repo" >> "$GITHUB_OUTPUT"
+          {
+            echo "tags<<EOF"
+            echo "$image_repo:${{ env.GITVERSION }}"
+            if [[ $GITHUB_REF == refs/tags/* ]]; then
+              echo "$image_repo:latest"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+    - name: Publish Docker image
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+      id: publish
+      uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+      with:
+        builder: ${{ steps.buildx.outputs.name }}
+        context: .
+        file: ${{ inputs.docker_file_path }}
+        push: true
+        build-args: |
+          NUGET_GITHUB_SERVER_URL=${{ secrets.nuget_github_server_url }}
+          NUGET_GITHUB_SERVER_USERNAME=${{ secrets.nuget_github_server_username }}
+          NUGET_GITHUB_SERVER_PASSWORD=${{ secrets.nuget_github_server_password }}
+          GITVERSION=${{ env.GITVERSION }}
+        cache-from: type=local,src=/tmp/.docker-cache
+        cache-to: type=local,dest=/tmp/.docker-cache,mode=max
+        tags: ${{ steps.image.outputs.tags }}
+
+  sign:
+    runs-on: ubuntu-24.04
+    needs: build
+    if: needs.build.outputs.image_digest != ''
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+
+    steps:
+    - name: Docker Login
+      uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+      with:
+        registry: ${{ secrets.docker_server_url }}
+        username: ${{ secrets.docker_server_username }}
+        password: ${{ secrets.docker_server_password }}
+
+    - name: Install cosign
+      uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+      with:
+        cosign-release: v3.0.6
+
+    - name: Sign published image
+      env:
+        IMAGE_REF: ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}@${{ needs.build.outputs.image_digest }}
+      run: |
+        cosign sign --yes "$IMAGE_REF"
 
     - name: Install Octopus CLI
-      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
       uses: OctopusDeploy/install-octopus-cli-action@53672953fdc83eef118faf7ac9f15638424bdd3f # v4.1.0
       with:
         version: 2.21.0
 
     - name: Determine Octopus release branch
-      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
       id: octopus-channel
       run: |
           echo "autorelease=false" >> $GITHUB_OUTPUT
@@ -246,16 +298,18 @@ jobs:
           fi
 
     - name: Octopus Create release
-      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+      env:
+        IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
+        GITVERSION: ${{ needs.build.outputs.gitversion }}
       run: |
           octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
-          octopus package zip create --id "${{ inputs.docker_image_name }}" --version "${{ env.GITVERSION }}" --base-path "nomad" --include "${{ inputs.docker_image_name }}.*"
-          octopus package upload --space "Spaces-1" --package "${{ inputs.docker_image_name }}.${{ env.GITVERSION }}.zip"
-          octopus release create --space "Spaces-1" --project "${{ inputs.docker_image_name }}" --version "${{ env.GITVERSION }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.docker_image_name }}:${{ env.GITVERSION }}"
+          octopus package zip create --id "${{ inputs.docker_image_name }}" --version "${GITVERSION}" --base-path "nomad" --include "${{ inputs.docker_image_name }}.*"
+          octopus package upload --space "Spaces-1" --package "${{ inputs.docker_image_name }}.${GITVERSION}.zip"
+          octopus release create --space "Spaces-1" --project "${{ inputs.docker_image_name }}" --version "${GITVERSION}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.docker_image_name }}:${GITVERSION}" --custom-field "ImageDigest:${IMAGE_DIGEST}"
 
           if ${{ steps.octopus-channel.outputs.autorelease }}; then
-            octopus deploy-release --project "${{ inputs.docker_image_name }}" --version "${{ env.GITVERSION }}" --tenant "*" --deployTo "${{ steps.octopus-channel.outputs.channel }}"
+            octopus deploy-release --project "${{ inputs.docker_image_name }}" --version "${GITVERSION}" --tenant "*" --deployTo "${{ steps.octopus-channel.outputs.channel }}"
           fi
 
           echo '### Octopus release' >> $GITHUB_STEP_SUMMARY
-          echo 'Pushed new release of docker container **${{ inputs.docker_image_name }}** version **${{ env.GITVERSION }}** to Octopus' >> $GITHUB_STEP_SUMMARY
+          echo 'Pushed signed release of docker container **${{ inputs.docker_image_name }}** version **'"${GITVERSION}"'** to Octopus' >> $GITHUB_STEP_SUMMARY
