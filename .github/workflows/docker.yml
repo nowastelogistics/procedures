@@ -127,15 +127,16 @@ jobs:
 
     - name: Build & Test Docker
       run: >-
-            docker build
+            docker buildx build
+            --builder ${{ steps.buildx.outputs.name }}
             --build-arg NUGET_GITHUB_SERVER_URL=${{ secrets.nuget_github_server_url }}
             --build-arg NUGET_GITHUB_SERVER_USERNAME=${{ secrets.nuget_github_server_username }}
             --build-arg NUGET_GITHUB_SERVER_PASSWORD=${{ secrets.nuget_github_server_password }}
             --build-arg GITVERSION=${{ env.GITVERSION }}
-            --output type=docker
+            --load
             --file ${{ inputs.docker_file_path }}
             --cache-from type=local,src=/tmp/.docker-cache
-            --cache-to type=local,dest=/tmp/.docker-cache
+            --cache-to type=local,dest=/tmp/.docker-cache,mode=max
             --tag ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ env.GITVERSION }} .
 
     - name: Extract test results
