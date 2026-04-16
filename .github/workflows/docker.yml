@@ -286,6 +286,7 @@ jobs:
         syft-version: v1.42.4
         artifact-name: ${{ inputs.docker_image_name }}-sbom-${{ needs.build.outputs.gitversion }}
         output-file: ${{ github.workspace }}/${{ inputs.docker_image_name }}-sbom.spdx.json
+        upload-release-assets: false
 
     - name: Attach SBOM attestation
       env:
