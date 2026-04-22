@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       gitversion: ${{ steps.version.outputs.gitversion }}
-      image_digest: ${{ steps.publish.outputs.digest }}
+      image_digest: ${{ steps.promote.outputs.digest }}
     permissions:
       contents: write
       checks: write
@@ -116,38 +116,59 @@ jobs:
         echo "gitversion=$version" >> "$GITHUB_OUTPUT"
         echo "Computed version: $version"
 
-    - name: Cache Docker layers
-      id: docker-cache
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-      with:
-        path: /tmp/.docker-cache
-        key: ${{ runner.os }}-docker-${{ hashFiles(inputs.docker_file_path) }}
-        restore-keys: ${{ runner.os }}-docker
-
     - name: Setup buildx
       uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
       id: buildx
       with:
         install: true
 
-    - name: Build & Test Docker
-      run: >-
-            docker buildx build
-            --builder ${{ steps.buildx.outputs.name }}
-            --build-arg NUGET_GITHUB_SERVER_URL=${{ secrets.nuget_github_server_url }}
-            --build-arg NUGET_GITHUB_SERVER_USERNAME=${{ secrets.nuget_github_server_username }}
-            --build-arg NUGET_GITHUB_SERVER_PASSWORD=${{ secrets.nuget_github_server_password }}
-            --build-arg GITVERSION=${{ env.GITVERSION }}
-            --load
-            --file ${{ inputs.docker_file_path }}
-            --cache-from type=local,src=/tmp/.docker-cache
-            --cache-to type=local,dest=/tmp/.docker-cache,mode=max
-            --tag ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ env.GITVERSION }} .
+    - name: Docker Login
+      uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+      with:
+        registry: ${{ secrets.docker_server_url }}
+        username: ${{ secrets.docker_server_username }}
+        password: ${{ secrets.docker_server_password }}
+
+    - name: Compute image references
+      id: image
+      run: |
+          image_repo="${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}"
+          temp_tag="$image_repo:ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cache_ref="$image_repo:buildcache"
+
+          echo "repo=$image_repo" >> "$GITHUB_OUTPUT"
+          echo "temp_tag=$temp_tag" >> "$GITHUB_OUTPUT"
+          echo "cache_ref=$cache_ref" >> "$GITHUB_OUTPUT"
+          {
+            echo "publish_tags<<EOF"
+            echo "$image_repo:${{ env.GITVERSION }}"
+            if [[ $GITHUB_REF == refs/tags/* ]]; then
+              echo "$image_repo:latest"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+    - name: Build Docker image
+      id: build
+      uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+      with:
+        builder: ${{ steps.buildx.outputs.name }}
+        context: .
+        file: ${{ inputs.docker_file_path }}
+        push: true
+        build-args: |
+          NUGET_GITHUB_SERVER_URL=${{ secrets.nuget_github_server_url }}
+          NUGET_GITHUB_SERVER_USERNAME=${{ secrets.nuget_github_server_username }}
+          NUGET_GITHUB_SERVER_PASSWORD=${{ secrets.nuget_github_server_password }}
+          GITVERSION=${{ env.GITVERSION }}
+        cache-from: type=registry,ref=${{ steps.image.outputs.cache_ref }}
+        cache-to: type=registry,ref=${{ steps.image.outputs.cache_ref }},mode=max
+        tags: ${{ steps.image.outputs.temp_tag }}
 
     - name: Extract test results
       if: inputs.docker_has_tests == true
       run: |
-            docker create -ti --name dummy ${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}:${{ env.GITVERSION }} bash
+            docker create -ti --name dummy ${{ steps.image.outputs.temp_tag }} bash
             docker cp dummy:/TestResults/. ./TestResults
 
             if [[ ${{ inputs.docker_has_code_coverage }} == true ]]; then
@@ -202,46 +223,21 @@ jobs:
         recreate: true
         path: code-coverage-results.md
 
-    - name: Docker Login
+    - name: Promote Docker image
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
-      uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
-      with:
-        registry: ${{ secrets.docker_server_url }}
-        username: ${{ secrets.docker_server_username }}
-        password: ${{ secrets.docker_server_password }}
-
-    - name: Compute publish tags
-      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
-      id: image
+      id: promote
       run: |
-          image_repo="${{ secrets.docker_server_url }}/${{ secrets.docker_server_username }}/${{ inputs.docker_image_name }}"
-          echo "repo=$image_repo" >> "$GITHUB_OUTPUT"
-          {
-            echo "tags<<EOF"
-            echo "$image_repo:${{ env.GITVERSION }}"
-            if [[ $GITHUB_REF == refs/tags/* ]]; then
-              echo "$image_repo:latest"
-            fi
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          source_ref="${{ steps.image.outputs.repo }}@${{ steps.build.outputs.digest }}"
+          tags=()
 
-    - name: Publish Docker image
-      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
-      id: publish
-      uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
-      with:
-        builder: ${{ steps.buildx.outputs.name }}
-        context: .
-        file: ${{ inputs.docker_file_path }}
-        push: true
-        build-args: |
-          NUGET_GITHUB_SERVER_URL=${{ secrets.nuget_github_server_url }}
-          NUGET_GITHUB_SERVER_USERNAME=${{ secrets.nuget_github_server_username }}
-          NUGET_GITHUB_SERVER_PASSWORD=${{ secrets.nuget_github_server_password }}
-          GITVERSION=${{ env.GITVERSION }}
-        cache-from: type=local,src=/tmp/.docker-cache
-        cache-to: type=local,dest=/tmp/.docker-cache,mode=max
-        tags: ${{ steps.image.outputs.tags }}
+          while IFS= read -r tag; do
+            [[ -n "$tag" ]] && tags+=(--tag "$tag")
+          done <<'EOF'
+          ${{ steps.image.outputs.publish_tags }}
+          EOF
+
+          docker buildx imagetools create "${tags[@]}" "$source_ref"
+          echo "digest=${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
 
   sign:
     runs-on: ubuntu-24.04
