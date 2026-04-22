@@ -163,6 +163,7 @@ jobs:
           GITVERSION=${{ env.GITVERSION }}
         cache-from: type=registry,ref=${{ steps.image.outputs.cache_ref }}
         cache-to: type=registry,ref=${{ steps.image.outputs.cache_ref }},mode=max
+        provenance: false
         tags: ${{ steps.image.outputs.temp_tag }}
 
     - name: Extract test results
