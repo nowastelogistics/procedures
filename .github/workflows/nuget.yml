@@ -26,12 +26,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout source
-      uses: actions/checkout@v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         fetch-depth: 0
 
     - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v4.2.0
+      uses: gittools/actions/gitversion/setup@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
       with:
         versionSpec: '6.x'
 
@@ -40,11 +40,10 @@ jobs:
 
     - name: Determine Version
       id: gitversion
-      uses: gittools/actions/gitversion/execute@v4.2.0
+      uses: gittools/actions/gitversion/execute@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
       with:
-        useConfigFile: true
         configFilePath: GitVersionConfig.yml
-        additionalArguments: '/diag /nocache' 
+        disableCache: true
         
     # Custom version format to match Docker / NuGet requirements. nuGetVersionV2 was removed from GitVersion v6
     - name: Build custom version
@@ -69,7 +68,7 @@ jobs:
         echo "Computed version: $version"
 
     - name: Setup .NET Core SDK
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
       with:
         dotnet-version: '10.x'
 
@@ -89,7 +88,7 @@ jobs:
 
     - name: Upload test results
       if: (success() || failure()) && steps.test.outputs.tests-exists == 'true'
-      uses: dorny/test-reporter@v1
+      uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
       with:
         name: Tests
         working-directory: ${{ github.workspace }}/TestResults
@@ -99,7 +98,7 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Code Coverage Summary Report
-      uses: irongut/CodeCoverageSummary@v1.3.0
+      uses: irongut/CodeCoverageSummary@51cc3a756ddcd398d447c044c02cb6aa83fdae95 # v1.3.0
       id: codecoveragereport
       if: hashFiles('TestResults/*.xml') != ''
       with:
@@ -108,22 +107,20 @@ jobs:
         format: 'markdown'
         output: 'both'
 
-    - name: Get Pull Request information
-      uses: 8BitJonny/gh-get-current-pr@3.0.0
-      if: steps.codecoveragereport.outcome == 'success'
-      id: PR
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        sha: ${{ github.event.pull_request.head.sha }}
-        filterOutClosed: true
-
     - name: Add Coverage PR Comment
-      uses: marocchino/sticky-pull-request-comment@v2
-      if: steps.PR.outputs.number != '' && steps.PR.outcome == 'success'
-      with:
-        number: ${{ steps.PR.outputs.number }}
-        recreate: true
-        path: code-coverage-results.md
+      if: steps.codecoveragereport.outcome == 'success' && github.event_name == 'pull_request'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        marker='<!-- code-coverage-summary -->'
+        comment_body="$(printf '%s\n\n' "$marker"; cat code-coverage-results.md)"
+        comment_id="$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" --paginate --jq ".[] | select(.body | contains(\"$marker\")) | .id" | head -n 1)"
+
+        if [ -n "$comment_id" ]; then
+          gh api "repos/${{ github.repository }}/issues/comments/$comment_id" -X PATCH -f body="$comment_body"
+        else
+          gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" -f body="$comment_body"
+        fi
 
     - name: Build & Pack NuGet
       run: |
