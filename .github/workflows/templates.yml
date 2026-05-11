@@ -15,6 +15,12 @@ on:
         type: boolean
         default: false
     secrets:
+      nuget_github_server_url:
+        required: true
+      nuget_github_server_username:
+        required: true
+      nuget_github_server_password:
+        required: true
       octopus_server_url:
         required: true
       octopus_server_apikey:
@@ -25,23 +31,66 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout source
-      uses: actions/checkout@v4
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       with:
         fetch-depth: 0
 
     - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v3.0.0
+      uses: gittools/actions/gitversion/setup@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
       with:
-        versionSpec: '5.x'
+        versionSpec: '6.x'
+
+    - name: Download GitVersion config
+      run: |
+        curl -L https://raw.githubusercontent.com/nowastelogistics/procedures/master/GitVersionConfig.yml -o GitVersionConfig.yml
 
     - name: Determine Version
-      uses: gittools/actions/gitversion/execute@v3.0.0
+      id: gitversion
+      uses: gittools/actions/gitversion/execute@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
       with:
-        useConfigFile: true
-        configFilePath: GitVersion.yml
+        configFilePath: GitVersionConfig.yml
+        disableCache: true
+
+    # Custom version format to match Docker / NuGet requirements. nuGetVersionV2 was removed from GitVersion v6
+    - name: Build custom version
+      run: |
+        major='${{ steps.gitversion.outputs.major }}'
+        minor='${{ steps.gitversion.outputs.minor }}'
+        patch='${{ steps.gitversion.outputs.patch }}'
+        label='${{ steps.gitversion.outputs.preReleaseLabel }}'
+        number='${{ steps.gitversion.outputs.commitsSinceVersionSource }}'
+
+        # zero-pad number to 5 digits (NuGet style)
+        padded=$(printf "%05d" "${number:-0}")
+
+        if [ -z "$label" ]; then
+          version="${major}.${minor}.${patch}"
+        else
+          version="${major}.${minor}.${patch}-${label}${padded}"
+        fi
+
+        echo "GITVERSION=$version" >> "$GITHUB_ENV"
+        echo "Computed version: $version"
+
+    - name: Setup .NET Core SDK
+      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+      with:
+        dotnet-version: '10.x'
+
+    - name: Prepare NuGet sources
+      run: |
+        dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }}
+
+    - name: Install validation tool
+      run: |
+        dotnet tool install WMan.Tool --global
+
+    - name: Validate templates
+      run: |
+        dotnet noman validate
 
     - name: Install Octopus CLI
-      uses: OctopusDeploy/install-octopus-cli-action@v3
+      uses: OctopusDeploy/install-octopus-cli-action@53672953fdc83eef118faf7ac9f15638424bdd3f # v4.1.0
       with:
         version: latest
 
@@ -68,26 +117,26 @@ jobs:
 
     - name: Write version information
       run: |
-        echo "{\"version\": \"${{ env.GitVersion_NuGetVersionV2 }}\"}" > version.json
-        echo "{\"version\": \"${{ env.GitVersion_NuGetVersionV2 }}\"}" > default/version.json
+        echo "{\"version\": \"${{ env.GITVERSION }}\"}" > version.json
+        echo "{\"version\": \"${{ env.GITVERSION }}\"}" > default/version.json
 
     - name: Archive Release
-      uses: thedoctor0/zip-release@0.7.5
+      uses: thedoctor0/zip-release@b57d897cb5d60cb78b51a507f63fa184cfe35554 # 0.7.6
       with:
         type: 'zip'
         filename: '${{ inputs.templates_name }}.zip'
-        exclusions: '*.git* /*node_modules/* .editorconfig GitVersion.yml'
+        exclusions: '*.git* /*node_modules/* .editorconfig GitVersion.yml GitVersionConfig.yml'
 
     - name: Octopus Create release
       run: |
           octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
-          octopus package zip create --id "${{ inputs.templates_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}"
-          octopus package upload --space "Spaces-1" --package "${{ inputs.templates_name }}.${{ env.GitVersion_NuGetVersionV2 }}.zip"
-          octopus release create --space "Spaces-1" --project "${{ inputs.templates_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.templates_name }}:${{ env.GitVersion_NuGetVersionV2 }}"
+          octopus package zip create --id "${{ inputs.templates_name }}" --version "${{ env.GITVERSION }}"
+          octopus package upload --space "Spaces-1" --package "${{ inputs.templates_name }}.${{ env.GITVERSION }}.zip"
+          octopus release create --space "Spaces-1" --project "${{ inputs.templates_name }}" --version "${{ env.GITVERSION }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.templates_name }}:${{ env.GITVERSION }}"
 
           if ${{ steps.octopus-channel.outputs.autorelease }}; then
-            octopus deploy-release --project "${{ inputs.templates_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --deployTo "${{ steps.octopus-channel.outputs.channel }}"
+            octopus deploy-release --project "${{ inputs.templates_name }}" --version "${{ env.GITVERSION }}" --deployTo "${{ steps.octopus-channel.outputs.channel }}"
           fi
 
           echo '### Template release' >> $GITHUB_STEP_SUMMARY
-          echo 'Pushed new release of template **${{ inputs.templates_name }}** version **${{ env.GitVersion_NuGetVersionV2 }}** to Octopus' >> $GITHUB_STEP_SUMMARY
+          echo 'Pushed new release of template **${{ inputs.templates_name }}** version **${{ env.GITVERSION }}** to Octopus' >> $GITHUB_STEP_SUMMARY
