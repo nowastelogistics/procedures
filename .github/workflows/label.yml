@@ -41,11 +41,13 @@ jobs:
         configFilePath: GitVersion.yml
 
     - name: Install Octopus CLI
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       uses: OctopusDeploy/install-octopus-cli-action@v3
       with:
         version: latest
 
     - name: Determine Octopus release branch
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       id: octopus-channel
       run: |
           echo "autorelease=false" >> $GITHUB_OUTPUT
@@ -67,6 +69,7 @@ jobs:
           fi
 
     - name: Archive Release
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       uses: thedoctor0/zip-release@0.7.5
       with:
         type: 'zip'
@@ -74,6 +77,7 @@ jobs:
         exclusions: '*.git* /*node_modules/* .editorconfig GitVersion.yml'
 
     - name: Octopus Create release
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       run: |
           octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
           octopus package zip create --id "${{ inputs.label_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}"

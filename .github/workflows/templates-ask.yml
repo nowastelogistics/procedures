@@ -36,15 +36,18 @@ jobs:
         fetch-depth: 0
 
     - name: Install GitVersion
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       uses: gittools/actions/gitversion/setup@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
       with:
         versionSpec: '6.x'
 
     - name: Download GitVersion config
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       run: |
         curl -L https://raw.githubusercontent.com/nowastelogistics/procedures/master/GitVersionConfig.yml -o GitVersionConfig.yml
 
     - name: Determine Version
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       id: gitversion
       uses: gittools/actions/gitversion/execute@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
       with:
@@ -53,6 +56,7 @@ jobs:
 
     # Custom version format to match Docker / NuGet requirements. nuGetVersionV2 was removed from GitVersion v6
     - name: Build custom version
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       run: |
         major='${{ steps.gitversion.outputs.major }}'
         minor='${{ steps.gitversion.outputs.minor }}'
@@ -90,13 +94,13 @@ jobs:
         dotnet ask validate
 
     - name: Install Octopus CLI
-      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       uses: OctopusDeploy/install-octopus-cli-action@53672953fdc83eef118faf7ac9f15638424bdd3f # v4.1.0
       with:
         version: latest
 
     - name: Determine Octopus release branch
-      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       id: octopus-channel
       run: |
           echo "autorelease=false" >> $GITHUB_OUTPUT
@@ -118,11 +122,12 @@ jobs:
           fi
 
     - name: Write version information
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       run: |
         echo "{\"version\": \"${{ env.GITVERSION }}\"}" > version.json
 
     - name: Archive Release
-      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       uses: thedoctor0/zip-release@b57d897cb5d60cb78b51a507f63fa184cfe35554 # 0.7.6
       with:
         type: 'zip'
@@ -130,7 +135,7 @@ jobs:
         exclusions: '*.git* /*node_modules/* .editorconfig GitVersion.yml README.md .vscode*'
 
     - name: Octopus Create release
-      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       run: |
           octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
           octopus package zip create --id "${{ inputs.templates_name }}" --version "${{ env.GITVERSION }}" --include *.zip

@@ -138,7 +138,7 @@ jobs:
         mv nomad/${{ inputs.project_name }}.* build/
 
     - name: Determine Octopus release branch
-      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       id: octopus-channel
       run: |
           "autorelease=false" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
@@ -161,7 +161,7 @@ jobs:
 
 
     - name: Octopus Create release
-      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       run: |
         octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
         octopus package zip create --id "${{ inputs.project_name }}" --version "${{ env.GITVERSION }}" --base-path "build" --include="**"
