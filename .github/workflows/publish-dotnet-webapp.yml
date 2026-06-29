@@ -1,0 +1,239 @@
+name: Reusable .NET Web App Octopus deploy
+
+on:
+  workflow_call:
+    inputs:
+      display_name:
+        description: Human-readable app name used in job output.
+        required: true
+        type: string
+      package_name:
+        description: Octopus package id. Must match the deployment step package name.
+        required: true
+        type: string
+      octopus_project_name:
+        description: Octopus project name to create releases for.
+        required: true
+        type: string
+      dotnet_version:
+        description: .NET SDK version to install.
+        required: true
+        type: string
+      configuration:
+        description: .NET build configuration.
+        required: false
+        type: string
+        default: Release
+      solution_path:
+        description: Solution path to restore and build.
+        required: true
+        type: string
+      test_project_path:
+        description: Test project path to run.
+        required: true
+        type: string
+      web_project_path:
+        description: Web project path to publish.
+        required: true
+        type: string
+      web_project_dir:
+        description: Web project directory whose bin and obj folders should be cleared before publish.
+        required: true
+        type: string
+      publish_path:
+        description: Publish output path that becomes the package root.
+        required: true
+        type: string
+      package_path:
+        description: Output path for generated Octopus packages.
+        required: true
+        type: string
+      octopus_space:
+        description: Octopus space id or name.
+        required: false
+        type: string
+        default: Spaces-1
+      octo_auto_release_dev:
+        description: Deploy development releases automatically.
+        required: false
+        type: boolean
+        default: false
+      octo_auto_release_prod:
+        description: Deploy production releases automatically.
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      octopus_server_url:
+        required: true
+      octopus_server_apikey:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build, package, and create Octopus release
+    runs-on: ubuntu-latest
+    outputs:
+      gitversion: ${{ steps.version.outputs.gitversion }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install GitVersion
+        uses: gittools/actions/gitversion/setup@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
+        with:
+          versionSpec: 6.x
+
+      - name: Download GitVersion config
+        run: curl -L https://raw.githubusercontent.com/nowastelogistics/procedures/master/GitVersionConfig.yml -o GitVersionConfig.yml
+
+      - name: Show GitVersion config
+        run: |
+          nl -ba GitVersionConfig.yml | sed -n '1,120p'
+
+      - name: Determine version
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
+        with:
+          configFilePath: GitVersionConfig.yml
+
+      - name: Show GitVersion output
+        run: |
+          echo "SemVer=${{ steps.gitversion.outputs.semVer }}"
+          echo "FullSemVer=${{ steps.gitversion.outputs.fullSemVer }}"
+          echo "PreReleaseTag=${{ steps.gitversion.outputs.preReleaseTag }}"
+          echo "PreReleaseLabel=${{ steps.gitversion.outputs.preReleaseLabel }}"
+          echo "PreReleaseNumber=${{ steps.gitversion.outputs.preReleaseNumber }}"
+          echo "CommitsSinceVersionSource=${{ steps.gitversion.outputs.commitsSinceVersionSource }}"
+          echo "GitBranchName=${{ steps.gitversion.outputs.branchName }}"
+
+      - name: Build custom package version
+        id: version
+        shell: bash
+        run: |
+          major='${{ steps.gitversion.outputs.major }}'
+          minor='${{ steps.gitversion.outputs.minor }}'
+          patch='${{ steps.gitversion.outputs.patch }}'
+          label='${{ steps.gitversion.outputs.preReleaseLabel }}'
+          number='${{ steps.gitversion.outputs.commitsSinceVersionSource }}'
+
+          padded=$(printf "%05d" "${number:-0}")
+
+          if [ -z "$label" ]; then
+            version="${major}.${minor}.${patch}"
+          else
+            version="${major}.${minor}.${patch}-${label}${padded}"
+          fi
+
+          echo "GITVERSION=$version" >> "$GITHUB_ENV"
+          echo "gitversion=$version" >> "$GITHUB_OUTPUT"
+          echo "Computed version: $version"
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ inputs.dotnet_version }}
+
+      - name: Restore
+        run: dotnet restore "${{ inputs.solution_path }}"
+
+      - name: Restore .NET workloads
+        run: dotnet workload restore "${{ inputs.web_project_path }}"
+
+      - name: Build
+        run: dotnet build "${{ inputs.solution_path }}" --configuration "${{ inputs.configuration }}" --no-restore -m:1
+
+      - name: Test
+        run: dotnet test "${{ inputs.test_project_path }}" --configuration "${{ inputs.configuration }}" --no-build -m:1
+
+      - name: Clear stale local web build artifacts
+        shell: bash
+        run: rm -rf "${{ inputs.web_project_dir }}/bin" "${{ inputs.web_project_dir }}/obj" "${{ inputs.publish_path }}" "${{ inputs.package_path }}"
+
+      - name: Publish web app
+        run: dotnet publish "${{ inputs.web_project_path }}" --configuration "${{ inputs.configuration }}" --output "${{ inputs.publish_path }}"
+
+      - name: Write version information
+        shell: bash
+        run: |
+          cat > "${{ inputs.publish_path }}/version.json" <<EOF
+          {
+            "version": "${{ env.GITVERSION }}",
+            "commit": "${{ github.sha }}",
+            "repository": "${{ github.repository }}"
+          }
+          EOF
+
+      - name: Install Octopus CLI
+        if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+        uses: OctopusDeploy/install-octopus-cli-action@v3
+        with:
+          version: latest
+
+      - name: Determine Octopus channel
+        if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+        id: octopus-channel
+        shell: bash
+        run: |
+          echo "autorelease=false" >> "$GITHUB_OUTPUT"
+
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "channel=Production" >> "$GITHUB_OUTPUT"
+            echo "notes=https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
+            if [[ "${{ inputs.octo_auto_release_prod }}" == "true" ]]; then
+              echo "autorelease=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "channel=Development" >> "$GITHUB_OUTPUT"
+            echo "notes=https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+
+            if [[ "${{ inputs.octo_auto_release_dev }}" == "true" ]] && [[ "$GITHUB_REF_NAME" == "develop" || "$GITHUB_REF_NAME" == release* ]]; then
+              echo "autorelease=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Octopus package and create release
+        if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release') || github.ref == 'refs/heads/develop'
+        shell: bash
+        env:
+          PACKAGE_NAME: ${{ inputs.package_name }}
+          OCTOPUS_PROJECT_NAME: ${{ inputs.octopus_project_name }}
+          PACKAGE_VERSION: ${{ env.GITVERSION }}
+          OCTOPUS_SPACE: ${{ inputs.octopus_space }}
+          OCTOPUS_SERVER_URL: ${{ secrets.octopus_server_url }}
+          OCTOPUS_API_KEY: ${{ secrets.octopus_server_apikey }}
+        run: |
+          mkdir -p "${{ inputs.package_path }}"
+
+          octopus login --server "$OCTOPUS_SERVER_URL" --api-key "$OCTOPUS_API_KEY"
+          octopus package zip create \
+            --id "$PACKAGE_NAME" \
+            --version "$PACKAGE_VERSION" \
+            --base-path "${{ inputs.publish_path }}" \
+            --out-folder "${{ inputs.package_path }}" \
+            --include "**/*"
+
+          PACKAGE_FILE="${{ inputs.package_path }}/${PACKAGE_NAME}.${PACKAGE_VERSION}.zip"
+
+          octopus package upload --space "$OCTOPUS_SPACE" --package "$PACKAGE_FILE"
+          octopus release create \
+            --space "$OCTOPUS_SPACE" \
+            --project "$OCTOPUS_PROJECT_NAME" \
+            --version "$PACKAGE_VERSION" \
+            --channel "${{ steps.octopus-channel.outputs.channel }}" \
+            --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" \
+            --package "$PACKAGE_NAME:$PACKAGE_VERSION"
+
+          {
+            echo "### ${{ inputs.display_name }} release"
+            echo "Created Octopus release **$OCTOPUS_PROJECT_NAME** version **$PACKAGE_VERSION**."
+            echo "Channel: **${{ steps.octopus-channel.outputs.channel }}**"
+            echo "Package: **$PACKAGE_NAME:$PACKAGE_VERSION**"
+          } >> "$GITHUB_STEP_SUMMARY"
