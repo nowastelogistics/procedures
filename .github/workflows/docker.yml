@@ -313,7 +313,7 @@ jobs:
           octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
           if [ -d "nomad" ]; then
             package_base_path="nomad"
-            package_include="${{ inputs.docker_image_name }}.*"
+            package_include="${{ inputs.docker_image_name }}*.*"
           elif [ -d "k8s" ]; then
             package_base_path="k8s"
             package_include="*"
