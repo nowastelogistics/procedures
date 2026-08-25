@@ -313,16 +313,19 @@ jobs:
           octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
           if [ -d "nomad" ]; then
             package_base_path="nomad"
-            package_include="${{ inputs.docker_image_name }}*.*"
+            package_includes=(
+              --include "${{ inputs.docker_image_name }}.*"
+              --include "${{ inputs.docker_image_name }}_*.*"
+            )
           elif [ -d "k8s" ]; then
             package_base_path="k8s"
-            package_include="*"
+            package_includes=(--include "*")
           else
             echo "No deployment package directory found. Expected nomad/ or k8s/."
             exit 1
           fi
 
-          octopus package zip create --id "${{ inputs.docker_image_name }}" --version "${GITVERSION}" --base-path "${package_base_path}" --include "${package_include}"
+          octopus package zip create --id "${{ inputs.docker_image_name }}" --version "${GITVERSION}" --base-path "${package_base_path}" "${package_includes[@]}"
           octopus package upload --space "Spaces-1" --package "${{ inputs.docker_image_name }}.${GITVERSION}.zip"
           octopus release create --space "Spaces-1" --project "${{ inputs.docker_image_name }}" --version "${GITVERSION}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.docker_image_name }}:${GITVERSION}" --custom-field "ImageDigest:${IMAGE_DIGEST}"
 
