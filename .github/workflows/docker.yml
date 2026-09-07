@@ -25,6 +25,10 @@ on:
         required: false
         type: boolean
         default: false
+      octo_push_build_information:
+        required: false
+        type: boolean
+        default: false
     secrets:
       docker_server_url:
         required: true
@@ -304,6 +308,17 @@ jobs:
               echo "autorelease=true" >> $GITHUB_OUTPUT
             fi
           fi
+
+    - name: Push build information to Octopus
+      if: inputs.octo_push_build_information == true
+      uses: OctopusDeploy/push-build-information-action@75c5d8aaf571bff2d10eca8ea8588b02c40b9037 # v4
+      with:
+        packages: ${{ inputs.docker_image_name }}
+        version: ${{ needs.build.outputs.gitversion }}
+        overwrite_mode: IgnoreIfExists
+        server: ${{ secrets.octopus_server_url }}
+        api_key: ${{ secrets.octopus_server_apikey }}
+        space: Spaces-1
 
     - name: Octopus Create release
       env:
