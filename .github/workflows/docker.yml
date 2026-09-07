@@ -318,7 +318,7 @@ jobs:
         overwrite_mode: IgnoreIfExists
         server: ${{ secrets.octopus_server_url }}
         api_key: ${{ secrets.octopus_server_apikey }}
-        space: Spaces-1
+        space: NoWaste
 
     - name: Octopus Create release
       env:
