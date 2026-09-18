@@ -25,6 +25,10 @@ on:
         required: false
         type: boolean
         default: false
+      octo_push_build_information:
+        required: false
+        type: boolean
+        default: false
     secrets:
       docker_server_url:
         required: true
@@ -330,6 +334,57 @@ jobs:
           fi
 
           echo "notes_file=$notes_file" >> "$GITHUB_OUTPUT"
+
+    - name: Push build information to Octopus
+      if: inputs.octo_push_build_information == true
+      env:
+        EVENT_BEFORE: ${{ github.event.before }}
+        OCTOPUS_SERVER: ${{ secrets.octopus_server_url }}
+        OCTOPUS_API_KEY: ${{ secrets.octopus_server_apikey }}
+      run: |
+        commits_file=$(mktemp)
+        build_information_file=$(mktemp)
+        trap 'rm -f "$commits_file" "$build_information_file"' EXIT
+
+        if [[ -n "$EVENT_BEFORE" && ! "$EVENT_BEFORE" =~ ^0+$ ]] \
+          && git cat-file -e "$EVENT_BEFORE^{commit}" 2>/dev/null \
+          && git merge-base --is-ancestor "$EVENT_BEFORE" "$GITHUB_SHA"; then
+          commit_ids=($(git rev-list --reverse "$EVENT_BEFORE..$GITHUB_SHA"))
+        else
+          commit_ids=("$GITHUB_SHA")
+        fi
+
+        for commit_id in "${commit_ids[@]}"; do
+          subject=$(git show -s --format='%s' "$commit_id")
+          author=$(git show -s --format='%an' "$commit_id")
+          if [[ "$author" =~ [cC][lL][aA][uU][dD][eE]|[cC][hH][aA][tT][gG][pP][tT]|[cC][oO][dD][eE][xX] ]]; then
+            author=''
+          fi
+
+          comment="$subject"
+          if [[ -n "$author" ]]; then
+            comment+="|||$author"
+          fi
+
+          jq -n \
+            --arg id "$commit_id" \
+            --arg comment "$comment" \
+            --arg link_url "https://github.com/$GITHUB_REPOSITORY/commit/$commit_id" \
+            '{Id: $id, Comment: $comment, LinkUrl: $link_url}' >> "$commits_file"
+        done
+
+        jq -n \
+          --arg build_number "$GITHUB_RUN_ID/$GITHUB_RUN_NUMBER" \
+          --arg build_url "https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+          --arg branch "$GITHUB_REF_NAME" \
+          --arg vcs_root "https://github.com/$GITHUB_REPOSITORY.git" \
+          --arg vcs_commit_number "$GITHUB_SHA" \
+          --arg vcs_commit_url "https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA" \
+          --slurpfile commits "$commits_file" \
+          '{BuildEnvironment: "GitHub Actions", BuildNumber: $build_number, BuildUrl: $build_url, Branch: $branch, VcsType: "Git", VcsRoot: $vcs_root, VcsCommitNumber: $vcs_commit_number, VcsCommitUrl: $vcs_commit_url, Commits: $commits}' > "$build_information_file"
+
+        octopus login --server "$OCTOPUS_SERVER" --api-key "$OCTOPUS_API_KEY"
+        octopus build-information upload --space "NoWaste" --package-id "${{ inputs.docker_image_name }}" --version "${{ needs.build.outputs.gitversion }}" --file "$build_information_file" --overwrite-mode "ignore" --no-prompt
 
     - name: Octopus Create release
       env:
