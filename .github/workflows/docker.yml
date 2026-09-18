@@ -356,6 +356,10 @@ jobs:
 
         for commit_id in "${commit_ids[@]}"; do
           subject=$(git show -s --format='%s' "$commit_id")
+          if [[ "$subject" == "Merge pull request #"* ]]; then
+            continue
+          fi
+
           author=$(git show -s --format='%an' "$commit_id")
           if [[ "$author" =~ [cC][lL][aA][uU][dD][eE]|[cC][hH][aA][tT][gG][pP][tT]|[cC][oO][dD][eE][xX] ]]; then
             author=''
