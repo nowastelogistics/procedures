@@ -87,7 +87,11 @@ jobs:
 
     - name: Install validation tool
       run: |
-        dotnet tool install NoEffect.Generator --global
+        if [[ "$GITHUB_REF" == refs/heads/release* ]]; then
+          dotnet tool install NoEffect.Generator --global --version "*-rc*"
+        else
+          dotnet tool install NoEffect.Generator --global
+        fi
 
     - name: Validate templates
       run: |
