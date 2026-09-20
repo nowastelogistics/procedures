@@ -66,6 +66,11 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Setup .NET Core SDK
+      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      with:
+        dotnet-version: '10.x'
+
     - name: Install GitVersion
       uses: gittools/actions/gitversion/setup@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
       with:
