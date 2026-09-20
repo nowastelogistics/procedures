@@ -176,8 +176,11 @@ jobs:
     - name: Extract test results
       if: inputs.docker_has_tests == true
       run: |
-            docker create -ti --name dummy ${{ steps.image.outputs.temp_tag }} bash
-            docker cp dummy:/TestResults/. ./TestResults
+            container_name="wmanapi-test-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            trap 'docker rm -f "$container_name" >/dev/null 2>&1 || true' EXIT
+
+            docker create -ti --name "$container_name" "${{ steps.image.outputs.temp_tag }}" bash
+            docker cp "$container_name:/TestResults/." ./TestResults
 
             if [[ ${{ inputs.docker_has_code_coverage }} == true ]]; then
               cp TestResults/*/coverage.cobertura.xml TestResults/coverage.cobertura.xml
