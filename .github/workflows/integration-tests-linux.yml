@@ -31,7 +31,11 @@ jobs:
 
     - name: Prepare NuGet sources
       run: |
-        dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }}
+        if dotnet nuget list source | grep -qE '^[[:space:]]*[0-9]+[.] +github \['; then
+          dotnet nuget update source github --source "${{ secrets.nuget_github_server_url }}" --username "${{ secrets.nuget_github_server_username }}" --password "${{ secrets.nuget_github_server_password }}" --store-password-in-clear-text
+        else
+          dotnet nuget add source --name github "${{ secrets.nuget_github_server_url }}" --username "${{ secrets.nuget_github_server_username }}" --password "${{ secrets.nuget_github_server_password }}" --store-password-in-clear-text
+        fi
 
     - name: Run Integration Tests
       id: test
