@@ -50,7 +50,9 @@ on:
 
 jobs:
   build:
-    runs-on: ['self-hosted', 'Linux']
+    # Self-hosted runner configuration (restore this when moving builds back):
+    # runs-on: ['self-hosted', 'Linux']
+    runs-on: ubuntu-24.04
     outputs:
       gitversion: ${{ steps.version.outputs.gitversion }}
       image_digest: ${{ steps.promote.outputs.digest }}
@@ -127,8 +129,9 @@ jobs:
       uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       id: buildx
       with:
-        name: buildx-${{ runner.name }}
-        keep-state: true
+        # Persistent named builders are useful on self-hosted runners only.
+        # name: buildx-${{ runner.name }}
+        # keep-state: true
         driver-opts: image=moby/buildkit:v0.30.0
 
     - name: Docker Login
