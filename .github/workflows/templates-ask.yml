@@ -87,7 +87,24 @@ jobs:
 
     - name: Install validation tool
       run: |
-        dotnet tool install NoEffect.Generator --global
+        if [[ "$GITHUB_REF" == refs/heads/release* ]]; then
+          validator_version=$(
+            dotnet package search NoEffect.Generator --exact-match --prerelease --format json |
+              jq -r '.searchResult[].packages[] | select(.id | ascii_downcase == "noeffect.generator") | .version | select(contains("-rc"))' |
+              sort -V |
+              tail -n 1
+          )
+
+          if [[ -z "$validator_version" ]]; then
+            echo "No RC version of NoEffect.Generator was found."
+            exit 1
+          fi
+
+          echo "Installing NoEffect.Generator $validator_version"
+          dotnet tool install NoEffect.Generator --global --version "$validator_version"
+        else
+          dotnet tool install NoEffect.Generator --global
+        fi
 
     - name: Validate templates
       run: |
