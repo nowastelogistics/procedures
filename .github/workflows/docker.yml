@@ -175,6 +175,10 @@ jobs:
         provenance: false
         tags: ${{ steps.image.outputs.temp_tag }}
 
+    - name: Pull image for test-result extraction
+      if: inputs.docker_has_tests == true
+      run: docker pull "${{ steps.image.outputs.temp_tag }}"
+
     - name: Extract test results
       if: inputs.docker_has_tests == true
       run: |
