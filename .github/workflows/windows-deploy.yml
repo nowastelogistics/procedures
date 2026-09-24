@@ -166,7 +166,7 @@ jobs:
 
     - name: Push build information to Octopus
       if: inputs.octo_push_build_information == true && (startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release'))
-      shell: pwsh
+      shell: powershell
       env:
         EVENT_BEFORE: ${{ github.event.before }}
         OCTOPUS_SERVER: ${{ secrets.octopus_server_url }}
@@ -174,10 +174,19 @@ jobs:
         PACKAGE_ID: ${{ inputs.project_name }}
       run: |
         $ErrorActionPreference = 'Stop'
+        [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
         $commitIds = @($env:GITHUB_SHA)
         if ($env:EVENT_BEFORE -and $env:EVENT_BEFORE -notmatch '^0+$') {
-            git cat-file -e "$($env:EVENT_BEFORE)^{commit}" 2>$null
-            if ($LASTEXITCODE -eq 0) {
+            # Windows PowerShell treats native stderr as errors with Stop enabled.
+            $savedErrorActionPreference = $ErrorActionPreference
+            try {
+                $ErrorActionPreference = 'Continue'
+                git cat-file -e "$($env:EVENT_BEFORE)^{commit}" 2>$null
+                $beforeExists = $LASTEXITCODE -eq 0
+            } finally {
+                $ErrorActionPreference = $savedErrorActionPreference
+            }
+            if ($beforeExists) {
                 git merge-base --is-ancestor $env:EVENT_BEFORE $env:GITHUB_SHA
                 if ($LASTEXITCODE -eq 0) {
                     $commitIds = @(git rev-list --reverse "$($env:EVENT_BEFORE)..$($env:GITHUB_SHA)")
@@ -219,7 +228,8 @@ jobs:
         }
         $buildInformationFile = Join-Path $env:RUNNER_TEMP "octopus-build-information-$([guid]::NewGuid()).json"
         try {
-            $buildInformation | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $buildInformationFile -Encoding utf8
+            $json = $buildInformation | ConvertTo-Json -Depth 5
+            [System.IO.File]::WriteAllText($buildInformationFile, $json, [System.Text.UTF8Encoding]::new($false))
             octopus login --server $env:OCTOPUS_SERVER --api-key $env:OCTOPUS_API_KEY
             if ($LASTEXITCODE -ne 0) { throw 'Octopus login failed.' }
             octopus build-information upload --space 'Spaces-1' --package-id $env:PACKAGE_ID --version $env:GITVERSION --file $buildInformationFile --overwrite-mode ignore --no-prompt
