@@ -376,6 +376,7 @@ jobs:
         for commit_id in "${commit_ids[@]}"; do
           subject=$(git show -s --format='%s' "$commit_id")
           if [[ "$subject" == "Merge pull request #"* \
+            || "$subject" == "Merge branch 'master' into "* \
             || "$subject" == "Merge origin/develop into "* \
             || "$subject" == "Merge remote-tracking branch 'origin/develop'"* ]]; then
             continue

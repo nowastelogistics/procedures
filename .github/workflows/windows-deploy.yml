@@ -20,6 +20,10 @@ on:
         required: false
         type: boolean
         default: false
+      octo_push_build_information:
+        required: false
+        type: boolean
+        default: false
     secrets:
       nuget_github_server_url:
         required: true
@@ -159,6 +163,72 @@ jobs:
               }
           }
 
+
+    - name: Push build information to Octopus
+      if: inputs.octo_push_build_information == true && (startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release'))
+      shell: pwsh
+      env:
+        EVENT_BEFORE: ${{ github.event.before }}
+        OCTOPUS_SERVER: ${{ secrets.octopus_server_url }}
+        OCTOPUS_API_KEY: ${{ secrets.octopus_server_apikey }}
+        PACKAGE_ID: ${{ inputs.project_name }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $commitIds = @($env:GITHUB_SHA)
+        if ($env:EVENT_BEFORE -and $env:EVENT_BEFORE -notmatch '^0+$') {
+            git cat-file -e "$($env:EVENT_BEFORE)^{commit}" 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                git merge-base --is-ancestor $env:EVENT_BEFORE $env:GITHUB_SHA
+                if ($LASTEXITCODE -eq 0) {
+                    $commitIds = @(git rev-list --reverse "$($env:EVENT_BEFORE)..$($env:GITHUB_SHA)")
+                    if ($LASTEXITCODE -ne 0) { throw 'Could not read commit range.' }
+                }
+            }
+        }
+
+        $commits = @(
+            foreach ($commitId in $commitIds) {
+                $subject = git show -s --format=%s $commitId
+                if ($LASTEXITCODE -ne 0) { throw 'Could not read commit subject.' }
+                if ($subject -like 'Merge pull request #*' -or
+                    $subject -like "Merge branch 'master' into *" -or
+                    $subject -like 'Merge origin/develop into *' -or
+                    $subject -like "Merge remote-tracking branch 'origin/develop'*") { continue }
+                $author = git show -s --format=%an $commitId
+                if ($LASTEXITCODE -ne 0) { throw 'Could not read commit author.' }
+                if ($author -match 'claude|chatgpt|codex') { $author = '' }
+                $comment = $subject
+                if ($author) { $comment += "|||$author" }
+                @{
+                    Id = $commitId
+                    Comment = $comment
+                    LinkUrl = "https://github.com/$env:GITHUB_REPOSITORY/commit/$commitId"
+                }
+            }
+        )
+        $buildInformation = @{
+            BuildEnvironment = 'GitHub Actions'
+            BuildNumber = "$env:GITHUB_RUN_ID/$env:GITHUB_RUN_NUMBER"
+            BuildUrl = "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+            Branch = $env:GITHUB_REF_NAME
+            VcsType = 'Git'
+            VcsRoot = "https://github.com/$env:GITHUB_REPOSITORY.git"
+            VcsCommitNumber = $env:GITHUB_SHA
+            VcsCommitUrl = "https://github.com/$env:GITHUB_REPOSITORY/commit/$env:GITHUB_SHA"
+            Commits = $commits
+        }
+        $buildInformationFile = Join-Path $env:RUNNER_TEMP "octopus-build-information-$([guid]::NewGuid()).json"
+        try {
+            $buildInformation | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $buildInformationFile -Encoding utf8
+            octopus login --server $env:OCTOPUS_SERVER --api-key $env:OCTOPUS_API_KEY
+            if ($LASTEXITCODE -ne 0) { throw 'Octopus login failed.' }
+            octopus build-information upload --space 'Spaces-1' --package-id $env:PACKAGE_ID --version $env:GITVERSION --file $buildInformationFile --overwrite-mode ignore --no-prompt
+            if ($LASTEXITCODE -ne 0) { throw 'Octopus build information upload failed.' }
+        } finally {
+            if (Test-Path -LiteralPath $buildInformationFile) {
+                Remove-Item -LiteralPath $buildInformationFile
+            }
+        }
 
     - name: Octopus Create release
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
