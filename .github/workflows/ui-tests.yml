@@ -1,10 +1,10 @@
-name: UI Tests
+name: UI Tests (legacy)
 
 on:
   workflow_call:
     inputs:
       project_test_file_path:
-        required: false
+        required: true
         type: string
       project_test_category:
         required: false
@@ -19,28 +19,7 @@ on:
 
 jobs:
   build:
-    runs-on: ['self-hosted', 'Windows']
-    steps:
-    - name: Checkout source
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
-    - name: Setup .NET Core SDK
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '10.x'
-
-    - name: Run UI Tests
-      id: test
-      run: dotnet test ${{ inputs.project_test_file_path }} --filter Category~"${{ inputs.project_test_category }}" --results-directory ./TestResults --logger "trx;LogFileName=ui-tests-results.trx" --logger "console;verbosity=normal"
-
-    - name: Upload UI Tests Results
-      uses: dorny/test-reporter@v1
-      with:
-        name: UI Tests Results
-        working-directory: ${{ github.workspace }}\TestResults
-        path: '*.trx'
-        reporter: dotnet-trx
-        max-annotations: '50'
-        token: ${{ secrets.GITHUB_TOKEN }}
+    uses: nowastelogistics/procedures/.github/workflows/wman-ui-tests.yml@master
+    with:
+      project_test_file_path: ${{ inputs.project_test_file_path }}
+      project_test_category: ${{ inputs.project_test_category }}

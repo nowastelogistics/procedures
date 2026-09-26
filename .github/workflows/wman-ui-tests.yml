@@ -1,0 +1,66 @@
+name: WMan UI Tests
+
+on:
+  workflow_call:
+    inputs:
+      project_test_file_path:
+        required: true
+        type: string
+      project_test_category:
+        required: false
+        type: string
+        default: ''
+      wmanapi_image_tag:
+        required: false
+        type: string
+        default: latest
+      wmanapimessaging_image_tag:
+        required: false
+        type: string
+        default: latest
+
+jobs:
+  build:
+    runs-on: ['self-hosted', 'Windows']
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      with:
+        dotnet-version: '10.x'
+
+    - name: Run UI Tests
+      id: test
+      shell: pwsh
+      env:
+        TEST_PROJECT: ${{ inputs.project_test_file_path }}
+        TEST_CATEGORY: ${{ inputs.project_test_category }}
+        WMAN_API_IMAGE_TAG: ${{ inputs.wmanapi_image_tag }}
+        WMAN_API_MESSAGING_IMAGE_TAG: ${{ inputs.wmanapimessaging_image_tag }}
+      run: |
+        $arguments = @(
+          'test', $env:TEST_PROJECT,
+          '--results-directory', './TestResults',
+          '--logger', 'trx;LogFileName=ui-tests-results.trx',
+          '--logger', 'console;verbosity=normal'
+        )
+        if (-not [string]::IsNullOrWhiteSpace($env:TEST_CATEGORY)) {
+          $arguments += @('--filter', "Category~$env:TEST_CATEGORY")
+        }
+        & dotnet @arguments
+        exit $LASTEXITCODE
+
+    - name: Upload UI Test Results
+      if: ${{ (success() || failure()) && hashFiles('TestResults/*.trx') != '' }}
+      uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+      with:
+        name: UI Tests Results
+        working-directory: ${{ github.workspace }}\TestResults
+        path: '*.trx'
+        reporter: dotnet-trx
+        max-annotations: '50'
+        token: ${{ secrets.GITHUB_TOKEN }}
