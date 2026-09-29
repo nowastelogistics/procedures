@@ -179,7 +179,8 @@ jobs:
           if [[ "$subject" == "Merge pull request #"* \
             || "$subject" == "Merge branch "* \
             || "$subject" == "Merge origin/develop into "* \
-            || "$subject" == "Merge remote-tracking branch 'origin/develop'"* ]]; then
+            || "$subject" == "Merge origin/master into "* \
+            || "$subject" == "Merge remote-tracking branch "* ]]; then
             continue
           fi
 
