@@ -200,7 +200,7 @@ jobs:
                 $subject = git show -s --format=%s $commitId
                 if ($LASTEXITCODE -ne 0) { throw 'Could not read commit subject.' }
                 if ($subject -like 'Merge pull request #*' -or
-                    $subject -like "Merge branch 'master' into *" -or
+                    $subject -like 'Merge branch *' -or
                     $subject -like 'Merge origin/develop into *' -or
                     $subject -like "Merge remote-tracking branch 'origin/develop'*") { continue }
                 $author = git show -s --format=%an $commitId
