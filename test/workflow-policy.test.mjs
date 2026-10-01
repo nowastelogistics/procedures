@@ -56,11 +56,34 @@ function assertStrictReportPolicy(workflow, name, expectedCondition) {
   assert.equal(report['continue-on-error'], undefined);
   assert.equal(guard['continue-on-error'], undefined);
   assert.ok(steps(workflow).indexOf(guard) > steps(workflow).indexOf(report), name + ' guard must follow its reporter');
-  assert.equal(
-    steps(workflow).slice(0, steps(workflow).indexOf(guard)).some(step => /(^|\\s)(pack|publish)(\\s|$)/i.test(step.run ?? '')),
-    false,
-    name + ' must gate test results before packaging or publication'
-  );
+  for (const step of publicationSteps(workflow)) {
+    assert.ok(
+      steps(workflow).indexOf(step) > steps(workflow).indexOf(guard),
+      name + ' must gate test results before packaging or publication (' + (step.name ?? step.id) + ')'
+    );
+  }
+}
+
+// The docker build pushes only a ci-<run> tag the tests run inside; promotion to the
+// published tags is the step that must wait for the guard.
+const publicationCommands = [
+  /\bdotnet\s+(pack|publish)\b/i,
+  /\bdotnet\s+nuget\s+push\b/i,
+  /\bdocker\s+(push|buildx\s+imagetools\s+create)\b/i,
+  /\boctopus\s+(package\s+upload|release\s+create|deploy-release|build-information\s+upload)\b/i
+];
+
+function publicationSteps(workflow) {
+  return steps(workflow).filter(step => publicationCommands.some(pattern => pattern.test(step.run ?? '')));
+}
+
+function moveBeforeGuard(workflow, predicate) {
+  const all = steps(workflow);
+  const step = all.find(predicate);
+  assert.ok(step, 'mutation target must exist');
+  all.splice(all.indexOf(step), 1);
+  all.splice(all.indexOf(requiredResultsGuard(workflow)), 0, step);
+  return workflow;
 }
 
 describe('reusable workflow test-result gates', () => {
@@ -135,5 +158,32 @@ describe('reusable workflow test-result gates', () => {
       () => assertStrictReportPolicy(weakened, 'weakened docker', '${{ always() && inputs.docker_has_tests == true }}'),
       /Expected values to be strictly equal/
     );
+  });
+
+  it('finds the real publication steps and rejects moving any of them before the guard', async () => {
+    const expected = {
+      'docker.yml': ['Promote Docker image'],
+      'nuget.yml': ['Build & Pack NuGet', 'Create NuGet release'],
+      'nuget-windows.yml': ['Build & Pack NuGet', 'Create NuGet release'],
+      'windows-deploy.yml': ['Build & Pack', 'Push build information to Octopus', 'Octopus Create release']
+    };
+    const conditions = {
+      'docker.yml': '${{ always() && inputs.docker_has_tests == true }}',
+      'nuget.yml': '${{ always() && steps.test.outputs.tests-exists == \'true\' }}',
+      'nuget-windows.yml': '${{ always() && steps.test.outputs.tests-exists == \'true\' }}',
+      'windows-deploy.yml': '${{ always() && steps.test.outputs.tests-exists == \'true\' }}'
+    };
+    for (const [file, names] of Object.entries(expected)) {
+      const workflow = await readWorkflow(file);
+      assert.deepEqual(publicationSteps(workflow).map(step => step.name), names, file + ' publication steps');
+      for (const name of names) {
+        const mutated = moveBeforeGuard(structuredClone(workflow), step => step.name === name);
+        assert.throws(
+          () => assertStrictReportPolicy(mutated, 'mutated ' + file, conditions[file]),
+          /must gate test results before packaging or publication/,
+          file + ': moving ' + name + ' before the guard must fail'
+        );
+      }
+    }
   });
 });
