@@ -67,6 +67,10 @@ printservice PR #41 now adds an unfiltered regression gate, tracks test source i
 
 The next priorities are merging the producer PRs before the Terraform branch-protection rollout, the WMan.WebClient test entry point, and the repository-specific SQL and fixture work. The table cannot establish runner availability, secrets, test discovery, database behavior, visual PDF correctness, or a successful publish; those require each repository's executable gate.
 
+## Observed TEST delivery
+
+The [Documents legacy Windows TEST job 110280930117](https://github.com/nowastelogistics/Nowaste.Documents/actions/runs/36835232324/job/110280930117) for [PR #180](https://github.com/nowastelogistics/Nowaste.Documents/pull/180) at `9d345690` passed 20 tests and uploaded the package, but failed while creating the Octopus release with `cannot find the item` for project `nowastedocuments` and channel `Development`. The [2026-08-31 job 99464877521](https://github.com/nowastelogistics/Nowaste.Documents/actions/runs/33384789654/job/99464877521) failed in the same way, so this batch did not introduce the failure. The new [Docker TEST run 36835232338](https://github.com/nowastelogistics/Nowaste.Documents/actions/runs/36835232338) built and signed successfully. The missing Octopus object is unknown; this evidence does not establish that the project was deleted or that the route is retired. The legacy route remains active while its requirement is decided.
+
 ## Observed infrastructure drift
 
 The [Terraform PR #497 CI plan](https://github.com/nowastelogistics/terraform/actions/runs/36832494401/job/110272074640) on 2026-10-01 reported 0 additions, 4 changes and 0 deletions. Three changes add the requested status checks. The fourth restores the existing review policy on `nowaste.database.deployservice` master: one approving review, code-owner review and stale-review dismissal. That repository definition was not changed in this batch; the plan exposed a difference between configured policy and GitHub's applied state. The extra restoration is documented in the draft PR and has not been applied. Required-check rollout remains dependent on merging the three producer PRs first.
