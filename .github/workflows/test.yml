@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       project_test_file_path:
-        required: false
+        required: true
         type: string
     secrets:
         nuget_github_server_url:
@@ -33,6 +33,8 @@ jobs:
       run: dotnet test ${{ inputs.project_test_file_path }} --results-directory ./TestResults --logger "trx;LogFileName=ui-tests-results.trx" --logger "console;verbosity=normal"
 
     - name: Upload UI Tests Results
+      id: test-reporter
+      if: ${{ always() }}
       uses: dorny/test-reporter@v1
       with:
         name: UI Tests Results
@@ -40,4 +42,10 @@ jobs:
         path: '*.trx'
         reporter: dotnet-trx
         max-annotations: '50'
+        fail-on-empty: 'true'
+        fail-on-error: 'true'
         token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Require passing test results
+      if: ${{ always() && (steps.test-reporter.outputs.passed == '' || steps.test-reporter.outputs.passed == '0') }}
+      run: exit 1
