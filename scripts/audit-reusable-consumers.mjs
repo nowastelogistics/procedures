@@ -17,7 +17,8 @@ async function workflow(root, file) {
 
 const wman = await workflow(argument('--wman-api'), 'WManApi.yml');
 const documents = await workflow(argument('--documents'), 'RegressionChecks.yml');
-const printservice = await workflow(argument('--printservice'), 'DocumentStore.yml');
+const printserviceDeployment = await workflow(argument('--printservice'), 'DocumentStore.yml');
+const printserviceRegression = await workflow(argument('--printservice'), 'RegressionChecks.yml');
 
 const wmanIntegration = wman.jobs.integrationtests;
 const wmanImage = wman.jobs.wmanapi;
@@ -31,15 +32,20 @@ assert.ok(documents.jobs['regression-tests']);
 assert.ok(documents.jobs['regression-tests'].steps.some(step => String(step.run).includes('dotnet test')));
 assert.ok(documents.jobs['regression-tests'].steps.some(step => String(step.run).includes('Assert-TrxResults.ps1')));
 
-const printJob = printservice.jobs.PrintService;
+const printJob = printserviceDeployment.jobs.PrintService;
 assert.match(printJob.uses, /procedures\/.github\/workflows\/docker\.yml@master$/);
 assert.equal(printJob.with.docker_has_tests, true);
-const trigger = printservice.on.push;
+const trigger = printserviceDeployment.on.push;
 const includesTestsPath = trigger.paths.some(path => path === 'Nowaste.DocumentStore.Tests/**');
+assert.ok(includesTestsPath, 'printservice deployment workflow must trigger for test-source changes');
+
+assert.ok(printserviceRegression.on.pull_request !== undefined);
+const printRegressionJob = printserviceRegression.jobs['regression-tests'];
+assert.ok(printRegressionJob);
+assert.ok(printRegressionJob.steps.some(step => String(step.run).includes('dotnet test')));
+assert.ok(printRegressionJob.steps.some(step => String(step.run).includes('Test-AssertTrxResults.ps1')));
+assert.ok(printRegressionJob.steps.some(step => String(step.run).includes('Assert-TrxResults.ps1')));
 
 console.log('WMan.API: integration job supplies a project, and image job needs integrationtests.');
 console.log('Nowaste.Documents: pull_request regression-tests runs dotnet test and Assert-TrxResults.ps1.');
-console.log('printservice: Docker route promises tests; PR trigger=' + (printservice.on.pull_request !== undefined) + ', test-source path=' + includesTestsPath + '.');
-if (!includesTestsPath || printservice.on.pull_request === undefined) {
-  console.log('printservice gap: its approved producer PR gate and test-source trigger are not present in this checkout.');
-}
+console.log('printservice: deployment test-source path is present; pull_request regression-tests runs dotnet test and the real TRX guard fixtures.');
