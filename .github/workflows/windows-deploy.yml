@@ -156,7 +156,7 @@ jobs:
               "channel=Development" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
               "notes=https://github.com/$env:GITHUB_REPOSITORY/commit/$env:GITHUB_SHA" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
 
-              if ("${{ inputs.octo_auto_release_dev }}" -eq "true" -and $env:GITHUB_REF -like "refs/heads/release/*") {
+              if ("${{ inputs.octo_auto_release_dev }}" -eq "true" -and $env:GITHUB_REF -clike "refs/heads/release/*") {
                   "autorelease=true" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
               }
           }
@@ -250,10 +250,13 @@ jobs:
         if ("${{ steps.octopus-channel.outputs.autorelease }}" -eq "true") {
             $project = "${{ inputs.project_name }}"
             # Every enabled tenant connected to the project in Development; none means an untenanted deployment.
+            $projectJson = octopus project view $project --space "Spaces-1" --output-format json
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $projectId = ($projectJson | Out-String | ConvertFrom-Json).Id
             $tenantsJson = octopus tenant list --space "Spaces-1" --output-format json
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             $tenantArgs = @(($tenantsJson | Out-String | ConvertFrom-Json) |
-                Where-Object { -not $_.IsDisabled -and ($_.ProjectEnvironments | Where-Object { $_.Project.Name -eq $project -and $_.Environments.Name -contains "Development" }) } |
+                Where-Object { -not $_.IsDisabled -and ($_.ProjectEnvironments | Where-Object { $_.Project.Id -ceq $projectId -and $_.Environments.Name -ccontains "Development" }) } |
                 ForEach-Object { "--tenant"; $_.Name })
             octopus release deploy --space "Spaces-1" --project $project --version "${{ env.GITVERSION }}" --environment "Development" @tenantArgs --no-prompt
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

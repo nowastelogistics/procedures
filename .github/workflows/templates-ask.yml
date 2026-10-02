@@ -223,8 +223,10 @@ jobs:
           if ${{ steps.octopus-channel.outputs.autorelease }}; then
             project="${{ inputs.templates_name }}"
             # Every enabled tenant connected to the project in Development; none means an untenanted deployment.
+            project_json=$(octopus project view "$project" --space "Spaces-1" --output-format json)
+            project_id=$(jq -r '.Id' <<< "$project_json")
             tenants_json=$(octopus tenant list --space "Spaces-1" --output-format json)
-            tenant_names=$(jq -r --arg project "$project" '.[] | select(.IsDisabled | not) | select(any(.ProjectEnvironments[]?; .Project.Name == $project and any(.Environments[]?; .Name == "Development"))) | .Name' <<< "$tenants_json")
+            tenant_names=$(jq -r --arg project_id "$project_id" '.[]? | select(.IsDisabled | not) | select(any(.ProjectEnvironments[]?; .Project.Id == $project_id and any(.Environments[]?; .Name == "Development"))) | .Name' <<< "$tenants_json")
             tenant_args=()
             while IFS= read -r tenant; do
               if [[ -n "$tenant" ]]; then
