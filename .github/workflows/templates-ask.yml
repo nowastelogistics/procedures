@@ -7,7 +7,7 @@ on:
         required: true
         type: string
       octo_auto_release_dev:
-        description: Deploy release/* builds to the Octopus Development environment.
+        description: Deploy builds of release/YYYY.WW.N branches (e.g. release/2026.40.1) to the Octopus Development environment.
         required: false
         type: boolean
         default: false
@@ -135,7 +135,7 @@ jobs:
             echo "channel=Development" >> $GITHUB_OUTPUT
             echo "notes=https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA" >> $GITHUB_OUTPUT
 
-            if [[ ${{ inputs.octo_auto_release_dev }} == true ]] && [[ $GITHUB_REF == refs/heads/release/* ]]; then
+            if [[ ${{ inputs.octo_auto_release_dev }} == true ]] && [[ $GITHUB_REF =~ ^refs/heads/release/[0-9]{4}\.[0-9]{1,2}\.[0-9]+$ ]]; then
               echo "autorelease=true" >> $GITHUB_OUTPUT
             fi
           fi
