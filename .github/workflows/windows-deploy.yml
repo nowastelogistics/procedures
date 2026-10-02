@@ -13,10 +13,12 @@ on:
         required: false
         type: string
       octo_auto_release_dev:
+        description: Deploy release/* builds to the Octopus Development environment.
         required: false
         type: boolean
         default: false
       octo_auto_release_prod:
+        description: Ignored. Production deployments are started by hand in Octopus.
         required: false
         type: boolean
         default: false
@@ -150,15 +152,11 @@ jobs:
           if ($env:GITHUB_REF -like 'refs/tags/*') {
               "channel=Production" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
               "notes=https://github.com/$env:GITHUB_REPOSITORY/releases/tag/$env:GITHUB_REF_NAME" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
-
-              if ($env:INPUTS_OCTO_AUTO_RELEASE_PROD -eq "true") {
-                  "autorelease=true" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
-              }
           } else {
               "channel=Development" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
               "notes=https://github.com/$env:GITHUB_REPOSITORY/commit/$env:GITHUB_SHA" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
 
-              if ($env:INPUTS_OCTO_AUTO_RELEASE_DEV -eq "true" -and $env:GITHUB_REF_NAME -like "refs/heads/release*") {
+              if ("${{ inputs.octo_auto_release_dev }}" -eq "true" -and $env:GITHUB_REF -like "refs/heads/release/*") {
                   "autorelease=true" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
               }
           }
@@ -249,8 +247,16 @@ jobs:
         octopus package upload --space "Spaces-1" --package "${{ inputs.project_name }}.${{ env.GITVERSION }}.zip"
         octopus release create --space "Spaces-1" --project "${{ inputs.project_name }}" --version "${{ env.GITVERSION }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.project_name }}:${{ env.GITVERSION }}"
 
-        if ($env:STEPS_OCTOPUS_CHANNEL_OUTPUTS_AUTORELEASE -eq "true") {
-            octopus deploy-release --project "${{ inputs.project_name }}" --version "${{ env.GITVERSION }}" --tenant "*" --deployTo "${{ steps.octopus-channel.outputs.channel }}"
+        if ("${{ steps.octopus-channel.outputs.autorelease }}" -eq "true") {
+            $project = "${{ inputs.project_name }}"
+            # Every enabled tenant connected to the project in Development; none means an untenanted deployment.
+            $tenantsJson = octopus tenant list --space "Spaces-1" --output-format json
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $tenantArgs = @(($tenantsJson | Out-String | ConvertFrom-Json) |
+                Where-Object { -not $_.IsDisabled -and ($_.ProjectEnvironments | Where-Object { $_.Project.Name -eq $project -and $_.Environments.Name -contains "Development" }) } |
+                ForEach-Object { "--tenant"; $_.Name })
+            octopus release deploy --space "Spaces-1" --project $project --version "${{ env.GITVERSION }}" --environment "Development" @tenantArgs --no-prompt
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         }
 
         "### Octopus release" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY

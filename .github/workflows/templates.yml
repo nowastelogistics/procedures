@@ -7,10 +7,12 @@ on:
         required: true
         type: string
       octo_auto_release_dev:
+        description: Deploy release/* builds to the Octopus Development environment.
         required: false
         type: boolean
         default: false
       octo_auto_release_prod:
+        description: Ignored. Production deployments are started by hand in Octopus.
         required: false
         type: boolean
         default: false
@@ -108,15 +110,11 @@ jobs:
           if [[ $GITHUB_REF == 'refs/tags/'* ]]; then
             echo "channel=Production" >> $GITHUB_OUTPUT
             echo "notes=https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME" >> $GITHUB_OUTPUT
-
-            if [[ ${{ inputs.octo_auto_release_prod }} == true ]]; then
-              echo "autorelease=true" >> $GITHUB_OUTPUT
-            fi
           else
             echo "channel=Development" >> $GITHUB_OUTPUT
             echo "notes=https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA" >> $GITHUB_OUTPUT
 
-            if [[ ${{ inputs.octo_auto_release_dev }} == true ]] && [[ $GITHUB_REF_NAME == "refs/heads/release"* ]]; then
+            if [[ ${{ inputs.octo_auto_release_dev }} == true ]] && [[ $GITHUB_REF == refs/heads/release/* ]]; then
               echo "autorelease=true" >> $GITHUB_OUTPUT
             fi
           fi
@@ -144,7 +142,17 @@ jobs:
           octopus release create --space "Spaces-1" --project "${{ inputs.templates_name }}" --version "${{ env.GITVERSION }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.templates_name }}:${{ env.GITVERSION }}"
 
           if ${{ steps.octopus-channel.outputs.autorelease }}; then
-            octopus deploy-release --project "${{ inputs.templates_name }}" --version "${{ env.GITVERSION }}" --deployTo "${{ steps.octopus-channel.outputs.channel }}"
+            project="${{ inputs.templates_name }}"
+            # Every enabled tenant connected to the project in Development; none means an untenanted deployment.
+            tenants_json=$(octopus tenant list --space "Spaces-1" --output-format json)
+            tenant_names=$(jq -r --arg project "$project" '.[] | select(.IsDisabled | not) | select(any(.ProjectEnvironments[]?; .Project.Name == $project and any(.Environments[]?; .Name == "Development"))) | .Name' <<< "$tenants_json")
+            tenant_args=()
+            while IFS= read -r tenant; do
+              if [[ -n "$tenant" ]]; then
+                tenant_args+=(--tenant "$tenant")
+              fi
+            done <<< "$tenant_names"
+            octopus release deploy --space "Spaces-1" --project "$project" --version "${{ env.GITVERSION }}" --environment "Development" "${tenant_args[@]}" --no-prompt
           fi
 
           echo '### Template release' >> $GITHUB_STEP_SUMMARY
