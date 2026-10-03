@@ -128,7 +128,8 @@ jobs:
         }
 
     - name: Upload test results
-      if: (success() || failure()) && steps.test.outputs.tests-exists == 'true'
+      id: test-reporter
+      if: ${{ always() && steps.test.outputs.tests-exists == 'true' }}
       uses: dorny/test-reporter@v1
       with:
         name: Tests
@@ -136,7 +137,13 @@ jobs:
         path: '*.trx'
         reporter: dotnet-trx
         max-annotations: '50'
+        fail-on-empty: 'true'
+        fail-on-error: 'true'
         token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Require passing test results
+      if: ${{ always() && steps.test.outputs.tests-exists == 'true' && (steps.test-reporter.outputs.passed == '' || steps.test-reporter.outputs.passed == '0') }}
+      run: exit 1
 
     - name: Build & Pack
       run: |
