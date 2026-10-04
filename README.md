@@ -23,3 +23,8 @@ are reported even when the command fails. Omit the input to retain existing beha
 The build also exposes `nuget_config` as a BuildKit secret for Dockerfiles using
 `RUN --mount=type=secret,id=nuget_config,required=true`. Legacy NuGet build arguments
 remain available to existing callers.
+
+NuGet configuration uses the SDK's `dotnet new nugetconfig` template and
+`dotnet nuget add source`, rather than hand-written XML. Unlike the integration-test
+workflow's persistent runner configuration, this file is created for each build and
+removed afterward; it supplies both BuildKit and the smoke command.
