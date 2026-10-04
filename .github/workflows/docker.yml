@@ -9,6 +9,11 @@ on:
       docker_image_name:
         required: true
         type: string
+      docker_smoke_test_command:
+        description: Optional Bash command run against IMAGE_REF before promotion. A nonzero exit blocks release.
+        required: false
+        type: string
+        default: ''
       docker_has_tests:
         required: false
         type: boolean
@@ -162,6 +167,16 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+    - name: Prepare NuGet configuration
+      env:
+        NUGET_URL: ${{ secrets.nuget_github_server_url }}
+        NUGET_USERNAME: ${{ secrets.nuget_github_server_username }}
+        NUGET_PASSWORD: ${{ secrets.nuget_github_server_password }}
+      run: |
+        config="$RUNNER_TEMP/docker-nuget.config"
+        printf '%s\n' '<configuration><packageSources><clear/><add key="nuget.org" value="https://api.nuget.org/v3/index.json"/></packageSources></configuration>' > "$config"
+        dotnet nuget add source "$NUGET_URL" --name github --username "$NUGET_USERNAME" --password "$NUGET_PASSWORD" --store-password-in-clear-text --configfile "$config"
+
     - name: Build Docker image
       id: build
       uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -170,6 +185,8 @@ jobs:
         context: .
         file: ${{ inputs.docker_file_path }}
         push: true
+        secret-files: |
+          nuget_config=${{ runner.temp }}/docker-nuget.config
         build-args: |
           NUGET_GITHUB_SERVER_URL=${{ secrets.nuget_github_server_url }}
           NUGET_GITHUB_SERVER_USERNAME=${{ secrets.nuget_github_server_username }}
@@ -179,6 +196,20 @@ jobs:
         cache-to: type=registry,ref=${{ steps.image.outputs.cache_ref }},mode=max
         provenance: false
         tags: ${{ steps.image.outputs.temp_tag }}
+
+    - name: Smoke test built image
+      if: inputs.docker_smoke_test_command != ''
+      env:
+        IMAGE_REF: ${{ steps.image.outputs.repo }}@${{ steps.build.outputs.digest }}
+        SMOKE_COMMAND: ${{ inputs.docker_smoke_test_command }}
+        NUGET_CONFIG: ${{ runner.temp }}/docker-nuget.config
+      run: |
+        docker pull "$IMAGE_REF"
+        bash -e -o pipefail -c "$SMOKE_COMMAND"
+
+    - name: Remove NuGet configuration
+      if: always()
+      run: rm -f "$RUNNER_TEMP/docker-nuget.config"
 
     - name: Pull image for test-result extraction
       if: inputs.docker_has_tests == true
