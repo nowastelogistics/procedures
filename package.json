@@ -2,8 +2,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/workflow-policy.test.mjs",
-    "audit-consumers": "node scripts/audit-reusable-consumers.mjs"
+    "test": "node --test test/workflow-policy.test.mjs"
   },
   "devDependencies": {
     "@actions/expressions": "0.3.61",
