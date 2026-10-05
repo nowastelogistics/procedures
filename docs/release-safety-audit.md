@@ -55,7 +55,7 @@ This is the durable inventory taken on 2026-10-01 from 50 local checkouts repres
 | WMan.WebClient | 0 | no root Node test script |
 | WMan.WebClient.Templates | 0 | declarations only |
 
-The inventory evidence was collected from test-project declarations and Node entry points. The producer CI changes in WMan.API, Nowaste.Documents and printservice were taken out of their PRs during review, so no producer workflow depends on these gates yet and the consumer audit script that checked them was removed.
+The inventory evidence was collected from test-project declarations and Node entry points. The producer CI changes in WMan.API, Nowaste.Documents and printservice were taken out of their PRs during review, so no producer repository has a dedicated regression workflow and the consumer audit script that checked for one was removed. Producers that already call docker.yml or integration-tests-linux.yml with tests, such as WMan.API and printservice, get the strict result check as soon as this change reaches master.
 
 ## Coverage and gaps
 
