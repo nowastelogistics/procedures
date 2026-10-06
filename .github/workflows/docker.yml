@@ -230,7 +230,7 @@ jobs:
 
     - name: Upload test results
       id: test-reporter
-      if: ${{ always() && inputs.docker_has_tests == true }}
+      if: ${{ always() && (inputs.docker_has_tests == true || (inputs.docker_smoke_test_command != '' && hashFiles('TestResults/*.trx') != '')) }}
       uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
       with:
         name: Tests
@@ -243,7 +243,7 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Require passing test results
-      if: ${{ always() && inputs.docker_has_tests == true && (steps.test-reporter.outputs.passed == '' || steps.test-reporter.outputs.passed == '0') }}
+      if: ${{ always() && (inputs.docker_has_tests == true || (inputs.docker_smoke_test_command != '' && hashFiles('TestResults/*.trx') != '')) && (steps.test-reporter.outputs.passed == '' || steps.test-reporter.outputs.passed == '0') }}
       run: exit 1
 
     - name: Coverage summary

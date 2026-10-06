@@ -6,6 +6,11 @@ import { parse } from 'yaml';
 
 const workflowFiles = ['docker.yml', 'integration-tests-linux.yml', 'integration-tests.yml', 'test.yml', 'nuget.yml', 'nuget-windows.yml', 'windows-deploy.yml'];
 const always = { name: 'always', minArgs: 0, maxArgs: 0, call: () => new data.BooleanData(true) };
+// Stand-in for the runner's hashFiles: a context's `files` lists the glob patterns that match something.
+function hashFilesFor(files) {
+  return { name: 'hashFiles', minArgs: 1, maxArgs: 255, call: (...patterns) => new data.StringData(patterns.some(pattern => files.includes(pattern.coerceString())) ? 'abc123' : '') };
+}
+const dockerCondition = "${{ always() && (inputs.docker_has_tests == true || (inputs.docker_smoke_test_command != '' && hashFiles('TestResults/*.trx') != '')) }}";
 
 async function readWorkflow(file) {
   return parse(await readFile(new URL('../.github/workflows/' + file, import.meta.url), 'utf8'));
@@ -35,9 +40,11 @@ function dictionary(value) {
 }
 
 function evaluate(condition, context) {
+  const { files = [], ...rest } = context;
+  const hashFiles = hashFilesFor(files);
   const source = condition.replace(/^\$\{\{\s*|\s*\}\}$/g, '');
-  const expression = new Parser(new Lexer(source).lex().tokens, ['inputs', 'steps'], [always]).parse();
-  return new Evaluator(expression, dictionary(context), new Map([['always', always]])).evaluate().coerceString() === 'true';
+  const expression = new Parser(new Lexer(source).lex().tokens, ['inputs', 'steps'], [always, hashFiles]).parse();
+  return new Evaluator(expression, dictionary(rest), new Map([['always', always], ['hashfiles', hashFiles]])).evaluate().coerceString() === 'true';
 }
 
 function assertStrictReportPolicy(workflow, name, expectedCondition) {
@@ -46,7 +53,7 @@ function assertStrictReportPolicy(workflow, name, expectedCondition) {
   assert.equal(report.if, expectedCondition);
   assert.equal(report.with['fail-on-empty'], 'true');
   assert.equal(report.with['fail-on-error'], 'true');
-  assert.doesNotMatch(report.if, /hashFiles/);
+  if (!name.includes('docker')) assert.doesNotMatch(report.if, /hashFiles/);
 
   const guard = requiredResultsGuard(workflow);
   assert.ok(guard, name + ' must fail before publication when no test passed');
@@ -94,7 +101,7 @@ describe('reusable workflow test-result gates', () => {
       assert.equal(workflows[file].on.workflow_call.inputs.project_test_file_path.required, true);
       assertStrictReportPolicy(workflows[file], file, '${{ always() }}');
     }
-    assertStrictReportPolicy(workflows['docker.yml'], 'docker', '${{ always() && inputs.docker_has_tests == true }}');
+    assertStrictReportPolicy(workflows['docker.yml'], 'docker', dockerCondition);
     for (const file of ['nuget.yml', 'nuget-windows.yml', 'windows-deploy.yml']) {
       assertStrictReportPolicy(workflows[file], file, '${{ always() && steps.test.outputs.tests-exists == \'true\' }}');
     }
@@ -144,18 +151,40 @@ describe('reusable workflow test-result gates', () => {
     }
   });
 
+  it('reports Docker smoke-test results when the image has no test stage, and still rejects missing ones when tests are promised', async () => {
+    const workflow = await readWorkflow('docker.yml');
+    const report = reporter(workflow);
+    const guard = requiredResultsGuard(workflow);
+    const smoke = 'dotnet test --logger trx';
+    const trx = ['TestResults/*.trx'];
+    const noTests = { docker_has_tests: false, docker_smoke_test_command: smoke };
+
+    assert.equal(evaluate(report.if, { inputs: noTests, steps: {}, files: trx }), true, 'smoke TRX is reported');
+    assert.equal(evaluate(report.if, { inputs: noTests, steps: {}, files: [] }), false, 'smoke without a TRX has nothing to report');
+    assert.equal(evaluate(report.if, { inputs: { docker_has_tests: false, docker_smoke_test_command: '' }, steps: {}, files: trx }), false, 'a stray TRX without a smoke command or tests is not reported');
+    assert.equal(evaluate(report.if, { inputs: { docker_has_tests: true, docker_smoke_test_command: '' }, steps: {}, files: [] }), true, 'promised tests are reported even when no TRX exists, so the reporter fails');
+
+    for (const passed of ['', '0']) {
+      const context = { inputs: noTests, steps: { 'test-reporter': { outputs: { passed } } }, files: trx };
+      assert.equal(evaluate(guard.if, context), true, 'smoke reports with no passing test fail the guard');
+    }
+    const passing = { inputs: noTests, steps: { 'test-reporter': { outputs: { passed: '3' } } }, files: trx };
+    assert.equal(evaluate(guard.if, passing), false, 'passing smoke results are accepted');
+    assert.equal(evaluate(guard.if, { inputs: noTests, steps: {}, files: [] }), false, 'the guard follows the reporter and does not invent a requirement');
+  });
+
   it('rejects mutations that remove the guard or weaken empty-report failure', async () => {
     const mutated = structuredClone(await readWorkflow('docker.yml'));
     mutated.jobs.build.steps = steps(mutated).filter(step => step.name !== 'Require passing test results');
     assert.throws(
-      () => assertStrictReportPolicy(mutated, 'mutated docker', '${{ always() && inputs.docker_has_tests == true }}'),
+      () => assertStrictReportPolicy(mutated, 'mutated docker', dockerCondition),
       /must fail before publication/
     );
 
     const weakened = structuredClone(await readWorkflow('docker.yml'));
     delete reporter(weakened).with['fail-on-empty'];
     assert.throws(
-      () => assertStrictReportPolicy(weakened, 'weakened docker', '${{ always() && inputs.docker_has_tests == true }}'),
+      () => assertStrictReportPolicy(weakened, 'weakened docker', dockerCondition),
       /Expected values to be strictly equal/
     );
   });
@@ -168,7 +197,7 @@ describe('reusable workflow test-result gates', () => {
       'windows-deploy.yml': ['Build & Pack', 'Push build information to Octopus', 'Octopus Create release']
     };
     const conditions = {
-      'docker.yml': '${{ always() && inputs.docker_has_tests == true }}',
+      'docker.yml': dockerCondition,
       'nuget.yml': '${{ always() && steps.test.outputs.tests-exists == \'true\' }}',
       'nuget-windows.yml': '${{ always() && steps.test.outputs.tests-exists == \'true\' }}',
       'windows-deploy.yml': '${{ always() && steps.test.outputs.tests-exists == \'true\' }}'

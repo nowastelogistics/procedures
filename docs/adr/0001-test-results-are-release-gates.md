@@ -8,7 +8,7 @@ The reusable Docker, Linux integration, Windows integration, UI test, NuGet, NuG
 
 When a caller promises tests, the workflow runs `dorny/test-reporter` with `fail-on-empty` and `fail-on-error`. Empty means no result files; it does not mean zero test cases. A following gate fails if the reporter has no `passed` output or reports zero passing tests. The gate is before promotion or publish steps.
 
-`project_test_file_path` remains optional in the NuGet and Windows deployment workflows for callers that do not have tests. Their reporter and passed-result gate activate only when that input is supplied. The three test-only workflows require the input; no available caller omits it. Docker callers retain the optional `docker_has_tests` input and opt into the same strict gate.
+`project_test_file_path` remains optional in the NuGet and Windows deployment workflows for callers that do not have tests. Their reporter and passed-result gate activate only when that input is supplied. The three test-only workflows require the input; no available caller omits it. Docker callers retain the optional `docker_has_tests` input and opt into the same strict gate. When the image has no test stage but `docker_smoke_test_command` produced `TestResults/*.trx`, the reporter and gate run for those results as well.
 
 ## Consequences
 
