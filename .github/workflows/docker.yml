@@ -229,15 +229,22 @@ jobs:
             fi
 
     - name: Upload test results
-      if: (success() || failure()) && hashFiles('TestResults/*.trx') != ''
-      uses: dorny/test-reporter@a6ddd83ac95ff4586f5d3aceeb314d9a1841db95 # v3.0.0
+      id: test-reporter
+      if: ${{ always() && (inputs.docker_has_tests == true || (inputs.docker_smoke_test_command != '' && hashFiles('TestResults/*.trx') != '')) }}
+      uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
       with:
         name: Tests
         working-directory: ${{ github.workspace }}/TestResults
         path: '*.trx'
         reporter: dotnet-trx
         max-annotations: '50'
+        fail-on-empty: 'true'
+        fail-on-error: 'true'
         token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Require passing test results
+      if: ${{ always() && (inputs.docker_has_tests == true || (inputs.docker_smoke_test_command != '' && hashFiles('TestResults/*.trx') != '')) && (steps.test-reporter.outputs.passed == '' || steps.test-reporter.outputs.passed == '0') }}
+      run: exit 1
 
     - name: Coverage summary
       id: coverage

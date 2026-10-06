@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       project_test_file_path:
-        required: false
+        required: true
         type: string
     secrets:
         nuget_github_server_url:
@@ -42,12 +42,19 @@ jobs:
       run: dotnet test ${{ inputs.project_test_file_path }} --results-directory ./TestResults --logger "trx;LogFileName=integration-tests-results.trx"
 
     - name: Upload Integration Tests Results
-      uses: dorny/test-reporter@a6ddd83ac95ff4586f5d3aceeb314d9a1841db95 # v3.0.0
-      if: ${{ (success() || failure()) && hashFiles('TestResults/*.trx') != '' }}
+      id: test-reporter
+      uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+      if: ${{ always() }}
       with:
         name: Integration Tests Results
         working-directory: ${{ github.workspace }}/TestResults
         path: '*.trx'
         reporter: dotnet-trx
         max-annotations: '50'
+        fail-on-empty: 'true'
+        fail-on-error: 'true'
         token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Require passing test results
+      if: ${{ always() && (steps.test-reporter.outputs.passed == '' || steps.test-reporter.outputs.passed == '0') }}
+      run: exit 1
