@@ -6,6 +6,11 @@ on:
       templates_name:
         required: true
         type: string
+      runner_labels:
+        description: JSON array of runner labels; use ["self-hosted", "Linux"] for the Linux runner.
+        required: false
+        type: string
+        default: '["ubuntu-latest"]'
       octo_auto_release_dev:
         description: Deploy builds of release/YYYY.WW.N branches (e.g. release/2026.40.1) to the Octopus Development environment.
         required: false
@@ -34,7 +39,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
     steps:
     - name: Checkout source
       uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -88,14 +93,22 @@ jobs:
         dotnet-version: '10.x'
 
     - name: Prepare NuGet sources
+      env:
+        NUGET_URL: ${{ secrets.nuget_github_server_url }}
+        NUGET_USERNAME: ${{ secrets.nuget_github_server_username }}
+        NUGET_PASSWORD: ${{ secrets.nuget_github_server_password }}
       run: |
-        dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }}
+        validator_dir=$(mktemp -d "$RUNNER_TEMP/ask-validator.XXXXXX")
+        echo "ASK_VALIDATOR_PATH=$validator_dir" >> "$GITHUB_ENV"
+        echo "ASK_NUGET_CONFIG=$validator_dir/nuget.config" >> "$GITHUB_ENV"
+        dotnet new nugetconfig --output "$validator_dir"
+        dotnet nuget add source "$NUGET_URL" --username "$NUGET_USERNAME" --password "$NUGET_PASSWORD" --store-password-in-clear-text --name github --configfile "$validator_dir/nuget.config"
 
     - name: Install validation tool
       run: |
         if [[ "$GITHUB_REF" == refs/heads/release* ]]; then
           validator_version=$(
-            dotnet package search NoEffect.Generator --exact-match --prerelease --format json |
+            dotnet package search NoEffect.Generator --exact-match --prerelease --format json --configfile "$ASK_NUGET_CONFIG" |
               jq -r '.searchResult[].packages[] | select(.id | ascii_downcase == "noeffect.generator") | .version | select(contains("-rc"))' |
               sort -V |
               tail -n 1
@@ -107,14 +120,21 @@ jobs:
           fi
 
           echo "Installing NoEffect.Generator $validator_version"
-          dotnet tool install NoEffect.Generator --global --version "$validator_version"
+          dotnet tool install NoEffect.Generator --tool-path "$ASK_VALIDATOR_PATH" --configfile "$ASK_NUGET_CONFIG" --version "$validator_version"
         else
-          dotnet tool install NoEffect.Generator --global
+          dotnet tool install NoEffect.Generator --tool-path "$ASK_VALIDATOR_PATH" --configfile "$ASK_NUGET_CONFIG"
         fi
 
     - name: Validate templates
       run: |
-        dotnet ask validate
+        "$ASK_VALIDATOR_PATH/dotnet-ask" validate
+
+    - name: Remove temporary NuGet credentials
+      if: always()
+      run: |
+        if [[ -n "$ASK_NUGET_CONFIG" ]]; then
+          rm -f -- "$ASK_NUGET_CONFIG"
+        fi
 
     - name: Install Octopus CLI
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')

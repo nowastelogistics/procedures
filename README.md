@@ -1,5 +1,14 @@
 # Shared workflows
 
+## Ask template validation
+
+`templates-ask.yml` accepts `runner_labels` as a JSON array, defaulting to
+`["ubuntu-latest"]`. Set it to `["self-hosted", "Linux"]` for self-hosted Linux.
+The validator and NuGet configuration are installed into a directory unique to each
+job run, avoiding existing global tools and persisted runner feed settings. Temporary
+NuGet credentials are removed after validation. Validation rules remain in
+NoEffect.Generator; this workflow invokes the released tool.
+
 ## Docker image smoke tests
 
 `docker.yml` accepts an optional `docker_smoke_test_command` (Bash). The command runs
