@@ -8,6 +8,8 @@ The validator and NuGet configuration are installed into a directory unique to e
 job run, avoiding existing global tools and persisted runner feed settings. Temporary
 NuGet credentials are removed after validation. Validation rules remain in
 NoEffect.Generator; this workflow invokes the released tool.
+Octopus commands receive authentication through step-scoped environment variables
+instead of saving a login in the runner's user profile.
 
 ## Docker image smoke tests
 

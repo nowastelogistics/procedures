@@ -177,7 +177,7 @@ jobs:
       if: inputs.octo_push_build_information == true && (startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release'))
       env:
         EVENT_BEFORE: ${{ github.event.before }}
-        OCTOPUS_SERVER: ${{ secrets.octopus_server_url }}
+        OCTOPUS_URL: ${{ secrets.octopus_server_url }}
         OCTOPUS_API_KEY: ${{ secrets.octopus_server_apikey }}
       run: |
         commits_file=$(mktemp)
@@ -229,13 +229,14 @@ jobs:
           --slurpfile commits "$commits_file" \
           '{BuildEnvironment: "GitHub Actions", BuildNumber: $build_number, BuildUrl: $build_url, Branch: $branch, VcsType: "Git", VcsRoot: $vcs_root, VcsCommitNumber: $vcs_commit_number, VcsCommitUrl: $vcs_commit_url, Commits: $commits}' > "$build_information_file"
 
-        octopus login --server "$OCTOPUS_SERVER" --api-key "$OCTOPUS_API_KEY"
         octopus build-information upload --space "NoWaste" --package-id "${{ inputs.templates_name }}" --version "${{ env.GITVERSION }}" --file "$build_information_file" --overwrite-mode "ignore" --no-prompt
 
     - name: Octopus Create release
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
+      env:
+        OCTOPUS_URL: ${{ secrets.octopus_server_url }}
+        OCTOPUS_API_KEY: ${{ secrets.octopus_server_apikey }}
       run: |
-          octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
           octopus package zip create --id "${{ inputs.templates_name }}" --version "${{ env.GITVERSION }}" --include *.zip
           octopus package upload --space "Spaces-1" --package "${{ inputs.templates_name }}.${{ env.GITVERSION }}.zip"
           octopus release create --space "Spaces-1" --project "${{ inputs.templates_name }}" --version "${{ env.GITVERSION }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.templates_name }}:${{ env.GITVERSION }}"
