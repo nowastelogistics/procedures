@@ -193,15 +193,18 @@ jobs:
             }
         }
 
+        $seenCommitIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
         $commits = @(
             foreach ($commitId in $commitIds) {
+                if (-not $seenCommitIds.Add($commitId)) { continue }
+                $parentIds = git show -s --format=%P $commitId
+                if ($LASTEXITCODE -ne 0) { throw 'Could not read commit parents.' }
+                $parents = @(([string]$parentIds -split '\s+') | Where-Object { $_ })
+                if ($parents.Count -gt 1) { continue }
                 $subject = git show -s --format=%s $commitId
                 if ($LASTEXITCODE -ne 0) { throw 'Could not read commit subject.' }
-                if ($subject -like 'Merge pull request #*' -or
-                    $subject -like 'Merge branch *' -or
-                    $subject -like 'Merge origin/develop into *' -or
-                    $subject -like 'Merge origin/master into *' -or
-                    $subject -like 'Merge remote-tracking branch *') { continue }
+                $subject = ($subject -replace '(?i)\[(build|skip ci|ci skip|no ci)\]', '' -replace '\s+', ' ').Trim()
+                if ([string]::IsNullOrWhiteSpace($subject)) { continue }
                 $author = git show -s --format=%an $commitId
                 if ($LASTEXITCODE -ne 0) { throw 'Could not read commit author.' }
                 if ($author -match 'claude|chatgpt|codex') { $author = '' }

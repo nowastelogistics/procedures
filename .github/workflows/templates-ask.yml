@@ -172,13 +172,20 @@ jobs:
           commit_ids=("$GITHUB_SHA")
         fi
 
+        declare -A seen_commit_ids=()
         for commit_id in "${commit_ids[@]}"; do
+          if [[ -n "${seen_commit_ids[$commit_id]+seen}" ]]; then
+            continue
+          fi
+          seen_commit_ids[$commit_id]=1
+          parent_ids=$(git show -s --format='%P' "$commit_id")
+          read -r -a parents <<< "$parent_ids"
+          if (( ${#parents[@]} > 1 )); then
+            continue
+          fi
           subject=$(git show -s --format='%s' "$commit_id")
-          if [[ "$subject" == "Merge pull request #"* \
-            || "$subject" == "Merge branch "* \
-            || "$subject" == "Merge origin/develop into "* \
-            || "$subject" == "Merge origin/master into "* \
-            || "$subject" == "Merge remote-tracking branch "* ]]; then
+          subject=$(printf '%s' "$subject" | sed -E 's/\[(build|skip ci|ci skip|no ci)\]//Ig; s/[[:space:]]+/ /g; s/^ //; s/ $//')
+          if [[ -z "$subject" ]]; then
             continue
           fi
 
