@@ -173,6 +173,7 @@ jobs:
         fi
 
         declare -A seen_commit_ids=()
+        declare -A seen_subjects=()
         for commit_id in "${commit_ids[@]}"; do
           if [[ -n "${seen_commit_ids[$commit_id]+seen}" ]]; then
             continue
@@ -189,6 +190,10 @@ jobs:
             continue
           fi
 
+          if [[ -n "${seen_subjects[$subject]+seen}" ]]; then
+            continue
+          fi
+          seen_subjects[$subject]=1
           author=$(git show -s --format='%an' "$commit_id")
           if [[ "$author" =~ [cC][lL][aA][uU][dD][eE]|[cC][hH][aA][tT][gG][pP][tT]|[cC][oO][dD][eE][xX] ]]; then
             author=''

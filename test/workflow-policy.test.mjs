@@ -3,6 +3,67 @@ import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 import { Evaluator, Lexer, Parser, data } from '@actions/expressions';
 import { parse } from 'yaml';
+import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+
+describe('notification commit subjects', () => {
+  const commits = [
+    { id: 'merge', subject: 'NWL-5604 Same text', parents: 'a b', author: 'Merge author' },
+    { id: 'first', subject: 'NWL-5604 Same text [build]', parents: 'a', author: 'First author' },
+    { id: 'second', subject: 'NWL-5604 Same text [skip ci]', parents: 'a', author: 'Other author' },
+    { id: 'different', subject: 'NWL-5604 Different text', parents: '', author: 'Root author' },
+    { id: 'case', subject: 'NWL-5604 same text', parents: 'a', author: 'Case author' },
+    { id: 'special', subject: "Fix [x] $(echo unsafe) 'quotes' åäö", parents: 'a', author: 'Special author' },
+    { id: 'specialDuplicate', subject: "Fix [x] $(echo unsafe) 'quotes' åäö", parents: 'a', author: 'Other author' },
+    { id: 'empty', subject: '[build]', parents: 'a', author: 'Empty author' }
+  ];
+  const ids = [...commits.map(commit => commit.id), 'first'];
+  const expected = ['first', 'different', 'case', 'special'].map(id => {
+    const commit = commits.find(item => item.id === id);
+    return `${id}\t${commit.subject.replace(' [build]', '')}|||${commit.author}`;
+  });
+  const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
+
+  for (const file of ['docker.yml', 'templates-ask.yml', 'windows-deploy.yml']) {
+    it(`${file}: keeps the first identical normalized subject, independent of author and SHA`, async () => {
+      const workflow = await readWorkflow(file);
+      const step = Object.values(workflow.jobs).flatMap(job => job.steps ?? [])
+        .find(item => item.name === 'Push build information to Octopus');
+      assert.ok(step, 'build information step must exist');
+      let executable, args, input;
+      if (file === 'windows-deploy.yml') {
+        const loop = step.run.match(/\$seenCommitIds =[\s\S]*?(?=\s*\$buildInformation =)/)?.[0];
+        assert.ok(loop, 'extract actual production PowerShell loop');
+        executable = process.platform === 'win32' ? 'powershell.exe' : 'pwsh';
+        const fixture = JSON.stringify(commits).replaceAll("'", "''");
+        input = `$ErrorActionPreference = 'Stop'\n` +
+          `$fixture = ConvertFrom-Json '${fixture}'\n` +
+          `function git { $format = $args[2]; $id = $args[3]\n` +
+          `$item = $fixture | Where-Object id -eq $id\n` +
+          `switch ($format) { '--format=%P' { $item.parents } '--format=%s' { $item.subject } '--format=%an' { $item.author } default { throw 'Unexpected git call' } }\n` +
+          `$global:LASTEXITCODE = 0\n}\n` +
+          `$commitIds = @(${ids.map(id => "'" + id + "'").join(',')})\n` + loop +
+          `\n$commits | ForEach-Object { Write-Output ($_.Id + "\t" + $_.Comment) }\n`;
+        args = ['-NoProfile', '-NonInteractive', '-Command', input];
+      } else {
+        const loop = step.run.match(/declare -A seen_commit_ids=[\s\S]*?\ndone\b/)?.[0];
+        assert.ok(loop, 'extract actual production Bash loop');
+        const gitBash = `${process.env.LOCALAPPDATA}/Programs/Git/bin/bash.exe`;
+        executable = process.platform === 'win32' && existsSync(gitBash) ? gitBash : 'bash';
+        const cases = commits.map(item => Object.entries({ '%P': item.parents, '%s': item.subject, '%an': item.author })
+          .map(([format, value]) => `${quote(item.id + ':' + format)}) printf '%s\\n' ${quote(value)} ;;`).join('\n')).join('\n');
+        input = 'set -euo pipefail\ngit() { case "$4:${3#--format=}" in\n' + cases + '\n*) return 1 ;;\nesac; }\n' +
+          `jq() { printf '%s\\t%s\\n' "$4" "$7"; }\n` +
+          `commit_ids=(${ids.map(quote).join(' ')})\nGITHUB_REPOSITORY=example/repo\ncommits_file=$(mktemp)\n` + loop + '\ncat "$commits_file"\n';
+        args = ['--noprofile', '--norc', '-s'];
+      }
+      const result = spawnSync(executable, args, { input, encoding: 'utf8', timeout: 30000 });
+      assert.ifError(result.error);
+      assert.equal(result.status, 0, result.stderr + result.stdout);
+      assert.deepEqual(result.stdout.trim().split(/\r?\n/), expected);
+    });
+  }
+});
 
 const workflowFiles = ['docker.yml', 'integration-tests-linux.yml', 'integration-tests.yml', 'test.yml', 'nuget.yml', 'nuget-windows.yml', 'windows-deploy.yml'];
 const always = { name: 'always', minArgs: 0, maxArgs: 0, call: () => new data.BooleanData(true) };
