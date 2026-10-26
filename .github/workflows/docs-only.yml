@@ -1,0 +1,54 @@
+name: Docs only
+
+# Tells the caller whether a pull request changes only allow-listed documentation files, so it
+# can skip its build and tests and still pass required.yml (NWL-5649).
+on:
+  workflow_call:
+    inputs:
+      allowed_paths:
+        description: Newline-separated globs of the files a pull request may change without build and tests; `*` stays within a folder, `**` crosses folders.
+        required: true
+        type: string
+    outputs:
+      docs_only:
+        description: "'true' when every file the pull request changes is allow-listed, otherwise 'false'."
+        value: ${{ jobs.changes.outputs.docs_only }}
+
+jobs:
+  changes:
+    runs-on: ['self-hosted', 'Linux']
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+
+    steps:
+    - name: Classify changed files
+      id: classify
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      env:
+        ALLOWED_PATHS: ${{ inputs.allowed_paths }}
+      with:
+        script: |
+          const toRegExp = glob => new RegExp('^' + glob.split(/(\*\*\/|\*\*|\*|\?)/).map(part =>
+            part === '**/' ? '(?:.*/)?'
+              : part === '**' ? '.*'
+              : part === '*' ? '[^/]*'
+              : part === '?' ? '[^/]'
+              : part.replace(/[.+^${}()|[\]\\]/g, '\\$&')).join('') + '$');
+          const allowed = (process.env.ALLOWED_PATHS ?? '').split('\n').map(line => line.trim()).filter(Boolean).map(toRegExp);
+          const pullRequest = context.payload.pull_request;
+          let docsOnly = false;
+          if (pullRequest && allowed.length > 0) {
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner, repo: context.repo.repo, pull_number: pullRequest.number, per_page: 100
+            });
+            // A rename counts with both its old and its new path.
+            const paths = files.flatMap(file => [file.filename, file.previous_filename].filter(Boolean));
+            const outside = paths.filter(path => !allowed.some(pattern => pattern.test(path)));
+            // The API lists at most 3000 files, so a list of that length may be cut off.
+            docsOnly = files.length > 0 && files.length < 3000 && outside.length === 0;
+            core.info(docsOnly ? `All ${paths.length} changed paths are allow-listed.` : `Build and tests required: ${outside.slice(0, 20).join(', ') || files.length + ' files'}`);
+          }
+          core.setOutput('docs_only', String(docsOnly));

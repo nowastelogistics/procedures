@@ -1,0 +1,36 @@
+name: Required
+
+# The one check branch protection requires (NWL-5649). Call it from a job with `if: always()`
+# that needs every build and test job: it passes only when they all succeeded, or when
+# docs-only.yml found only allow-listed files and the caller skipped them.
+on:
+  workflow_call:
+    inputs:
+      results:
+        description: The caller's `toJSON(needs)`.
+        required: true
+        type: string
+      docs_only:
+        description: The `docs_only` output of docs-only.yml.
+        required: true
+        type: string
+
+jobs:
+  gate:
+    runs-on: ['self-hosted', 'Linux']
+    permissions: {}
+
+    steps:
+    - name: Require passing build and tests
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      env:
+        RESULTS: ${{ inputs.results }}
+        DOCS_ONLY: ${{ inputs.docs_only }}
+      with:
+        script: |
+          const jobs = Object.entries(JSON.parse(process.env.RESULTS || '{}'));
+          const docsOnly = process.env.DOCS_ONLY === 'true';
+          const failed = jobs.filter(([, job]) => job.result !== 'success' && !(docsOnly && job.result === 'skipped'));
+          if (jobs.length === 0) core.setFailed('The caller passed no jobs to check.');
+          else if (failed.length > 0) core.setFailed('Not passed: ' + failed.map(([name, job]) => `${name} (${job.result})`).join(', '));
+          else core.info(docsOnly ? 'Only allow-listed documentation changed; build and tests skipped.' : 'Build and tests passed: ' + jobs.map(([name]) => name).join(', '));
