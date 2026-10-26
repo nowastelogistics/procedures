@@ -28,3 +28,44 @@ NuGet configuration uses the SDK's `dotnet new nugetconfig` template and
 `dotnet nuget add source`, rather than hand-written XML. Unlike the integration-test
 workflow's persistent runner configuration, this file is created for each build and
 removed afterward; it supplies both BuildKit and the smoke command.
+
+## Required check and docs-only pull requests
+
+`required.yml` is the one check branch protection requires (NWL-5649), so protection does
+not depend on each repo's job names. `docs-only.yml` tells the caller whether a pull request
+changes only the files its `allowed_paths` globs list (`*` within a folder, `**` across
+folders); the caller then skips its build and tests. Both run on the self-hosted Linux runner.
+
+```yaml
+jobs:
+  changes:
+    uses: nowastelogistics/procedures/.github/workflows/docs-only.yml@master
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      allowed_paths: |
+        README.md
+        docs/**/*.md
+
+  build:
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
+    uses: nowastelogistics/procedures/.github/workflows/docker.yml@master
+    # ...
+
+  required:
+    needs: [changes, build]
+    if: always()
+    uses: nowastelogistics/procedures/.github/workflows/required.yml@master
+    with:
+      results: ${{ toJSON(needs) }}
+      docs_only: ${{ needs.changes.outputs.docs_only }}
+```
+
+The check is named `required / gate`. It passes when every job in `needs` succeeded, or when
+the change is docs-only and every job in `needs` succeeded or was skipped; otherwise a
+failed, cancelled or skipped job fails it. List every build and test job in `needs`. A rename counts with
+both paths, and a pull request with no files or 3000 files (the API's limit) is never
+docs-only. A pull request whose last commit carries `[skip ci]` runs no workflow, so the check
+stays pending until a commit without it is pushed.
