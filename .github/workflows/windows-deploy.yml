@@ -201,6 +201,7 @@ jobs:
         }
 
         $seenCommitIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        $seenSubjects = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
         $commits = @(
             foreach ($commitId in $commitIds) {
                 if (-not $seenCommitIds.Add($commitId)) { continue }
@@ -212,6 +213,7 @@ jobs:
                 if ($LASTEXITCODE -ne 0) { throw 'Could not read commit subject.' }
                 $subject = ($subject -replace '(?i)\[(build|skip ci|ci skip|no ci)\]', '' -replace '\s+', ' ').Trim()
                 if ([string]::IsNullOrWhiteSpace($subject)) { continue }
+                if (-not $seenSubjects.Add($subject)) { continue }
                 $author = git show -s --format=%an $commitId
                 if ($LASTEXITCODE -ne 0) { throw 'Could not read commit author.' }
                 if ($author -match 'claude|chatgpt|codex') { $author = '' }
