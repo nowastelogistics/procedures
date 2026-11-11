@@ -24,9 +24,12 @@ jobs:
         fetch-depth: 0
 
     - name: Setup .NET Core SDK
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
       with:
-        dotnet-version: '10.x'
+        dotnet-version: |
+          10.x
+          11.x
+        skip-lts-prepass: true
 
     - name: Run Integration Tests
       id: test

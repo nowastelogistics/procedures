@@ -79,9 +79,12 @@ jobs:
         echo "Computed version: $version"
 
     - name: Setup .NET Core SDK
-      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+      uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
       with:
-        dotnet-version: '10.x'
+        dotnet-version: |
+          10.x
+          11.x
+        skip-lts-prepass: true
 
     - name: Prepare NuGet sources
       run: |
