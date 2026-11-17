@@ -69,3 +69,5 @@ failed, cancelled or skipped job fails it. List every build and test job in `nee
 both paths, and a pull request with no files or 3000 files (the API's limit) is never
 docs-only. A pull request whose last commit carries `[skip ci]` runs no workflow, so the check
 stays pending until a commit without it is pushed.
+
+For WMan.Api production tags, see [production data evidence](docs/production-data-evidence.md) before publishing the release.
