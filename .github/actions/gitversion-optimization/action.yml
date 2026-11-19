@@ -1,0 +1,40 @@
+name: Check for version-bump messages
+description: Skip commit-message version increments only when no relevant markers exist
+outputs:
+  override-config:
+    description: Optional GitVersion configuration override
+    value: ${{ steps.check.outputs.override-config }}
+runs:
+  using: composite
+  steps:
+    - id: check
+      shell: bash
+      run: |
+        echo 'override-config=' >> "$GITHUB_OUTPUT"
+
+        # Check the effective rules, since the downloaded configuration can change.
+        if ! config=$(dotnet-gitversion --roll-forward Major /config GitVersionConfig.yml /showconfig); then
+          echo 'Could not inspect GitVersion configuration; using its default behavior.'
+          exit 0
+        fi
+        rules=$(printf '%s\n' "$config" | grep -E '^(major-version-bump-message|minor-version-bump-message|patch-version-bump-message|no-bump-message):' || true)
+        expected='major-version-bump-message: "\\+semver:\\s?(breaking|major)"
+        minor-version-bump-message: "\\+semver:\\s?(feature|minor)"
+        patch-version-bump-message: "\\+semver:\\s?(fix|patch)"
+        no-bump-message: "\\+semver:\\s?(none|skip)"'
+        if [[ "$rules" != "$expected" ]]; then
+          echo 'GitVersion bump rules differ from the known defaults; using its default behavior.'
+          exit 0
+        fi
+
+        # Check all reachable commit messages, including the detached PR merge commit.
+        if ! marker=$(git --no-replace-objects log --all HEAD --no-notes --extended-regexp --grep='[+][^[:space:]]*:' -1 --format=%H); then
+          echo 'Could not inspect commit history; using GitVersion default behavior.'
+          exit 0
+        fi
+        if [[ -n "$marker" ]]; then
+          echo 'A potential version marker exists; using GitVersion default behavior.'
+          exit 0
+        fi
+
+        echo 'override-config=commit-message-incrementing=Disabled' >> "$GITHUB_OUTPUT"
