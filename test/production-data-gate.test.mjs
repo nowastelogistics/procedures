@@ -51,7 +51,7 @@ test('workflow gate runs after checkout and before build, promotion and downstre
   const w = parse(await readFile(new URL('../.github/workflows/docker.yml', import.meta.url), 'utf8'));
   const steps = w.jobs.build.steps, index = steps.findIndex(s => s.name === 'Require production data evidence'), gate = steps[index];
   assert.equal(index, 1); assert.equal(steps[0].name, 'Checkout source');
-  assert.equal(gate.uses, '$/.github/actions/production-data-gate');
+  assert.equal(gate.uses, 'nowastelogistics/procedures/.github/actions/production-data-gate@master');
   assert.equal(gate['continue-on-error'], undefined);
   assert.ok(index < steps.findIndex(s => s.name === 'Build Docker image'));
   assert.ok(index < steps.findIndex(s => s.name === 'Promote Docker image'));
