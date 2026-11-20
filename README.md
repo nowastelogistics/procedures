@@ -69,3 +69,52 @@ failed, cancelled or skipped job fails it. List every build and test job in `nee
 both paths, and a pull request with no files or 3000 files (the API's limit) is never
 docs-only. A pull request whose last commit carries `[skip ci]` runs no workflow, so the check
 stays pending until a commit without it is pushed.
+
+## AI review as github-actions[bot]
+
+`ai-review.yml` posts a PR review that an agent prepared on a developer's machine, so the
+review shows as `github-actions[bot]` instead of as that developer (NWL-5376). The
+agent-skills helper `post-review.js` dispatches the repo's own `ai-review.yml` with the
+review as base64 gzipped JSON; this workflow repeats the helper's refresh (PR open, head still
+the reviewed sha, nobody else approved), posts one review with its inline comments, and can
+dismiss an earlier changes request the bot posted for the same person. It never approves.
+The posted body ends with `<!-- ai-review-requested-by: <actor> -->`, taken from GitHub's actor and
+not from the payload; the agent-skills review queue and weekly retro read it to count the review as
+that person's, so keep it as the body's last line. The token is the caller's,
+so a review can only land in the repo that dispatched it. A repo opts in with this caller on
+its default branch, under exactly this file name:
+
+```yaml
+# .github/workflows/ai-review.yml
+name: AI review
+run-name: "AI review PR #${{ inputs.pr }} (${{ inputs.request }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        required: true
+        type: number
+      payload:
+        required: true
+        type: string
+      request:
+        description: Correlation id post-review.js uses to find this run.
+        required: true
+        type: string
+
+concurrency:
+  group: ai-review-${{ inputs.pr }}
+  cancel-in-progress: false
+
+jobs:
+  post:
+    permissions:
+      pull-requests: write
+    uses: nowastelogistics/procedures/.github/workflows/ai-review.yml@master
+    with:
+      pr: ${{ inputs.pr }}
+      payload: ${{ inputs.payload }}
+```
+
+Without the caller, `post-review.js` posts with the developer's own GitHub access as before.
