@@ -123,14 +123,25 @@ jobs:
                 owner, repo, pull_number, commit_id: review.commit_id, event: review.event, body, comments,
               }));
             } catch (e) {
-              // An error can come after GitHub stored the review: read back before calling it a failure.
-              let stored;
-              try { stored = postedFor(await listReviews()); } catch (_) {
-                return core.setFailed(`posting answered HTTP ${e.status} and the reviews could not be read back; check the PR before posting again`);
+              // An error can come after GitHub stored the review, and the list can show it late: read
+              // back a few times. Only a 4xx answer is a refusal; any other outcome stays unknown, and a
+              // new dispatch (a new request id) could post a copy, so the run says to reconcile first.
+              const refused = e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429;
+              const runUrl = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${owner}/${repo}/actions/runs/${context.runId}`;
+              const unknown = `outcome unknown: posting answered ${e.status ? `HTTP ${e.status}` : e.message}`;
+              const waitMs = Number(process.env.AI_REVIEW_READBACK_MS || 3000);
+              let stored = null;
+              for (let attempt = 0; attempt < (refused ? 1 : 4) && !stored; attempt++) {
+                if (attempt) await new Promise((done) => setTimeout(done, waitMs));
+                try { stored = postedFor(await listReviews()); } catch (_) {
+                  if (!refused) return core.setFailed(`${unknown} and the reviews could not be read back; reconcile with ${runUrl} on the PR before posting again`);
+                  break;
+                }
               }
-              if (!stored) return core.setFailed(`GitHub refused the review (HTTP ${e.status}): ${e.message}; nothing posted`);
+              if (!stored && refused) return core.setFailed(`GitHub refused the review (HTTP ${e.status}): ${e.message}; nothing posted`);
+              if (!stored) return core.setFailed(`${unknown} and no review with request ${request} is listed yet; reconcile with ${runUrl} on the PR before posting again`);
               created = stored;
-              core.warning(`posting answered HTTP ${e.status}, but the review was stored`);
+              core.warning(`posting answered ${e.status ? `HTTP ${e.status}` : e.message}, but the review was stored`);
             }
             report(created, '');
           }

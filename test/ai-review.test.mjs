@@ -17,7 +17,7 @@ const step = job.steps.find((s) => s.id === 'post');
 const encode = (value) => gzipSync(Buffer.from(typeof value === 'string' ? value : JSON.stringify(value))).toString('base64');
 
 // Runs the github-script step against a fake GitHub that records every write.
-async function post(payload, { pr = {}, reviews = [], reviewsAfter = null, readBackFails = false, createFails = null, dismissFails = false, prNumber = '7', actor = 'dev' } = {}) {
+async function post(payload, { pr = {}, reviews = [], reviewsAfter = null, reviewsByCall = null, readBackFails = false, createFails = null, dismissFails = false, prNumber = '7', actor = 'dev' } = {}) {
   let lists = 0;
   const calls = { created: [], dismissed: [] };
   const failures = [];
@@ -44,6 +44,7 @@ async function post(payload, { pr = {}, reviews = [], reviewsAfter = null, readB
       assert.equal(method, 'listReviews'); assert.equal(params.pull_number, 7);
       lists++;
       if (lists > 1 && readBackFails) throw new Error('read back failed');
+      if (reviewsByCall) return reviewsByCall(lists);
       return lists > 1 && reviewsAfter ? reviewsAfter : reviews;
     },
   };
@@ -52,7 +53,7 @@ async function post(payload, { pr = {}, reviews = [], reviewsAfter = null, readB
     setOutput: (k, v) => { outputs[k] = v; },
   };
   const context = { runId: 4242, repo: { owner: 'nowastelogistics', repo: 'WMan.Api' } };
-  const env = { PR: prNumber, PAYLOAD: typeof payload === 'string' && !payload.startsWith('{') ? payload : encode(payload), ACTOR: actor };
+  const env = { AI_REVIEW_READBACK_MS: '0', PR: prNumber, PAYLOAD: typeof payload === 'string' && !payload.startsWith('{') ? payload : encode(payload), ACTOR: actor };
   const saved = { ...process.env };
   Object.assign(process.env, env);
   try {
@@ -198,7 +199,17 @@ describe('ai-review.yml', () => {
     assert.equal(lost.outputs.review_url, 'https://example.invalid/r/78');
     assert.match(lost.warnings[0], /stored/);
     const unknown = await post({ ...base, request: 'req-3' }, { createFails: { status: 502, message: 'Bad gateway' }, readBackFails: true });
-    assert.match(unknown.failures[0], /could not be read back; check the PR/);
+    assert.match(unknown.failures[0], /outcome unknown.*could not be read back; reconcile with https:\/\/github\.com\/nowastelogistics\/WMan\.Api\/actions\/runs\/4242/);
+    const empty = await post({ ...base, request: 'req-3' }, { createFails: { status: 502, message: 'Bad gateway' }, reviewsAfter: [] });
+    assert.match(empty.failures[0], /outcome unknown.*no review with request req-3 is listed yet; reconcile with .*runs\/4242/);
+    assert.doesNotMatch(empty.failures[0], /nothing posted/, 'a 502 with an empty list is not "nothing posted"');
+    for (const status of [undefined, 408, 429, 503]) {
+      const r = await post({ ...base, request: 'req-3' }, { createFails: { status, message: 'lost' }, reviewsAfter: [] });
+      assert.match(r.failures[0], /outcome unknown/, `status ${status}`);
+    }
+    const late = await post({ ...base, request: 'req-3' }, { createFails: { status: 502, message: 'Bad gateway' }, reviewsByCall: (n) => (n >= 4 ? [stored] : []) });
+    assert.deepEqual(late.failures, [], 'a stored review that shows up only on a later read is found');
+    assert.equal(late.outputs.review_url, 'https://example.invalid/r/78');
     const refused = await post({ ...base, request: 'req-3' }, { createFails: { status: 422, message: 'Unprocessable' }, reviewsAfter: [] });
     assert.match(refused.failures[0], /HTTP 422.*nothing posted/);
   });
