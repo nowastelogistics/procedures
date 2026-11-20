@@ -83,7 +83,8 @@ The posted body ends with a visible line `🤖 AI-review på uppdrag av <actor>`
 not from the payload; the agent-skills review queue and weekly retro read it to count the review as
 that person's, so keep it as the body's last line. The request id (`post-review.js` sends one per
 dispatch; a re-run reuses it) lets the workflow find a review GitHub stored although its answer was
-lost, so a retry never posts twice. A changes request on the dispatching actor's own PR is refused,
+lost, so a retry never posts twice. A re-run of a run only reports a review stored under its request id
+and never posts: after an unknown outcome, reconcile on the PR and dispatch a new review. A changes request on the dispatching actor's own PR is refused,
 as GitHub refuses it to the person. The token is the caller's,
 so a review can only land in the repo that dispatched it. A repo opts in with this caller on
 its default branch, under exactly this file name:

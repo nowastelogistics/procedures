@@ -62,7 +62,7 @@ jobs:
             }
             if (r.dismiss_review_id !== undefined && (!Number.isInteger(r.dismiss_review_id) || r.dismiss_review_id < 1)) return 'dismiss_review_id must be a positive integer';
             if (r.dismiss_message !== undefined && (typeof r.dismiss_message !== 'string' || !r.dismiss_message.trim())) return 'dismiss_message must be non-empty text';
-            if (r.request !== undefined && !/^[A-Za-z0-9-]{1,64}$/.test(String(r.request))) return 'request must be 1-64 letters, digits or hyphens';
+            if (r.request !== undefined && (typeof r.request !== 'string' || !/^[A-Za-z0-9-]{1,64}$/.test(r.request))) return 'request must be a string of 1-64 letters, digits or hyphens';
             return null;
           };
           const MARK = /(?:^|\n)[ \t]*<!-- ai-review-requested-by: ([A-Za-z0-9-]+)(?:; request: ([A-Za-z0-9-]+))? -->[ \t\r\n]*$/;
@@ -96,6 +96,14 @@ jobs:
           const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number });
           const reviews = await listReviews();
           let created = postedFor(reviews);
+          // A re-run reuses the request id, and an earlier attempt may have ended with an unknown
+          // outcome: GitHub may hold a review it does not list yet. An empty list proves nothing then,
+          // so a re-run only reports a stored review and never posts. A new review is a new dispatch,
+          // after reconciling on the PR.
+          const attempt = Number(process.env.GITHUB_RUN_ATTEMPT || 1);
+          if (!created && attempt > 1) {
+            return core.setFailed(`re-run (attempt ${attempt}) found no review with request ${request}; an earlier attempt may have stored one that is not listed yet, so a re-run never posts. Reconcile on the PR, then dispatch a new review; nothing posted`);
+          }
           if (created) report(created, '; already posted by an earlier attempt, not posted again');
           else {
             // The same refresh post-review.js did before dispatching, repeated because the PR may

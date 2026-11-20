@@ -17,7 +17,7 @@ const step = job.steps.find((s) => s.id === 'post');
 const encode = (value) => gzipSync(Buffer.from(typeof value === 'string' ? value : JSON.stringify(value))).toString('base64');
 
 // Runs the github-script step against a fake GitHub that records every write.
-async function post(payload, { pr = {}, reviews = [], reviewsAfter = null, reviewsByCall = null, readBackFails = false, createFails = null, dismissFails = false, prNumber = '7', actor = 'dev' } = {}) {
+async function post(payload, { pr = {}, reviews = [], reviewsAfter = null, reviewsByCall = null, readBackFails = false, createFails = null, dismissFails = false, prNumber = '7', actor = 'dev', runAttempt = '1' } = {}) {
   let lists = 0;
   const calls = { created: [], dismissed: [] };
   const failures = [];
@@ -53,7 +53,7 @@ async function post(payload, { pr = {}, reviews = [], reviewsAfter = null, revie
     setOutput: (k, v) => { outputs[k] = v; },
   };
   const context = { runId: 4242, repo: { owner: 'nowastelogistics', repo: 'WMan.Api' } };
-  const env = { AI_REVIEW_READBACK_MS: '0', PR: prNumber, PAYLOAD: typeof payload === 'string' && !payload.startsWith('{') ? payload : encode(payload), ACTOR: actor };
+  const env = { GITHUB_RUN_ATTEMPT: runAttempt, AI_REVIEW_READBACK_MS: '0', PR: prNumber, PAYLOAD: typeof payload === 'string' && !payload.startsWith('{') ? payload : encode(payload), ACTOR: actor };
   const saved = { ...process.env };
   Object.assign(process.env, env);
   try {
@@ -215,8 +215,23 @@ describe('ai-review.yml', () => {
     assert.match(refused.failures[0], /HTTP 422.*nothing posted/);
   });
 
-  it('refuses a malformed request id', async () => {
-    const r = await post({ ...base, request: 'bad id!' });
+  it('refuses a malformed request id, and one that is not a string', async () => {
+    for (const request of ['bad id!', 12345, ['req-1'], '', 'x'.repeat(65)]) {
+      const r = await post({ ...base, request });
+      assert.equal(r.calls.created.length, 0, JSON.stringify(request));
+      assert.match(r.failures[0], /request must be a string/, JSON.stringify(request));
+    }
+  });
+
+  it('a re-run never posts: it only reports a stored review, otherwise it waits for reconciliation', async () => {
+    const r = await post({ ...base, request: 'req-9' }, { runAttempt: '2', reviews: [] });
     assert.equal(r.calls.created.length, 0);
-    assert.match(r.failures[0], /request must be/);
+    assert.match(r.failures[0], /re-run \(attempt 2\) found no review with request req-9.*Reconcile on the PR, then dispatch a new review; nothing posted/);
+    const stored = { id: 79, state: 'COMMENTED', html_url: 'https://example.invalid/r/79', user: { login: BOT }, body: 'x\n\n<!-- ai-review-requested-by: dev; request: req-9 -->' };
+    const found = await post({ ...base, request: 'req-9' }, { runAttempt: '3', reviews: [stored] });
+    assert.deepEqual(found.failures, []);
+    assert.equal(found.calls.created.length, 0);
+    assert.equal(found.outputs.review_url, 'https://example.invalid/r/79');
+    const first = await post({ ...base, request: 'req-9' }, { runAttempt: '1' });
+    assert.equal(first.calls.created.length, 1, 'the first attempt posts');
   });});
