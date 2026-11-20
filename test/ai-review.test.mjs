@@ -17,7 +17,8 @@ const step = job.steps.find((s) => s.id === 'post');
 const encode = (value) => gzipSync(Buffer.from(typeof value === 'string' ? value : JSON.stringify(value))).toString('base64');
 
 // Runs the github-script step against a fake GitHub that records every write.
-async function post(payload, { pr = {}, reviews = [], createFails = null, dismissFails = false, prNumber = '7', actor = 'dev' } = {}) {
+async function post(payload, { pr = {}, reviews = [], reviewsAfter = null, readBackFails = false, createFails = null, dismissFails = false, prNumber = '7', actor = 'dev' } = {}) {
+  let lists = 0;
   const calls = { created: [], dismissed: [] };
   const failures = [];
   const warnings = [];
@@ -39,13 +40,18 @@ async function post(payload, { pr = {}, reviews = [], createFails = null, dismis
         },
       },
     },
-    paginate: async (method, params) => { assert.equal(method, 'listReviews'); assert.equal(params.pull_number, 7); return reviews; },
+    paginate: async (method, params) => {
+      assert.equal(method, 'listReviews'); assert.equal(params.pull_number, 7);
+      lists++;
+      if (lists > 1 && readBackFails) throw new Error('read back failed');
+      return lists > 1 && reviewsAfter ? reviewsAfter : reviews;
+    },
   };
   const core = {
     setFailed: (m) => failures.push(m), warning: (m) => warnings.push(m), info: () => {},
     setOutput: (k, v) => { outputs[k] = v; },
   };
-  const context = { repo: { owner: 'nowastelogistics', repo: 'WMan.Api' } };
+  const context = { runId: 4242, repo: { owner: 'nowastelogistics', repo: 'WMan.Api' } };
   const env = { PR: prNumber, PAYLOAD: typeof payload === 'string' && !payload.startsWith('{') ? payload : encode(payload), ACTOR: actor };
   const saved = { ...process.env };
   Object.assign(process.env, env);
@@ -85,7 +91,7 @@ describe('ai-review.yml', () => {
     assert.equal(c.commit_id, SHA);
     assert.equal(c.event, 'REQUEST_CHANGES');
     assert.equal(c.pull_number, 7);
-    assert.equal(c.body, 'Ser bra ut.\n\n<!-- ai-review-requested-by: dev -->', 'the body is kept and names the dispatching actor, from GitHub, not the payload');
+    assert.equal(c.body, 'Ser bra ut.\n\n<!-- ai-review-requested-by: dev; request: run-4242 -->', 'the body is kept and names the dispatching actor, from GitHub, not the payload, and the request');
     assert.deepEqual(c.comments, [
       { path: 'A.cs', line: 12, side: 'RIGHT', body: 'Måste ändras.' },
       { path: 'B.cs', line: 5, side: 'LEFT', body: 'Flera rader.', start_line: 3, start_side: 'LEFT' },
@@ -136,7 +142,7 @@ describe('ai-review.yml', () => {
   });
 
   it('dismisses only an active changes request the bot posted for the same actor', async () => {
-    const mark = (who) => `Måste ändras.\n\n<!-- ai-review-requested-by: ${who} -->`;
+    const mark = (who) => `Måste ändras.\n\n<!-- ai-review-requested-by: ${who}; request: old-1 -->`;
     const reviews = [
       { id: 5, state: 'CHANGES_REQUESTED', user: { login: BOT }, body: mark('Dev') },
       { id: 6, state: 'CHANGES_REQUESTED', user: { login: 'colleague' }, body: mark('dev') },
@@ -157,4 +163,48 @@ describe('ai-review.yml', () => {
     assert.deepEqual(failed.failures, []);
     assert.match(failed.warnings[0], /dismiss it by hand/);
   });
-});
+  it('never requests changes on the dispatching actor\'s own PR, but may comment there', async () => {
+    const own = await post({ ...base, event: 'REQUEST_CHANGES' }, { pr: { user: { login: 'Dev' } } });
+    assert.equal(own.calls.created.length, 0);
+    assert.match(own.failures[0], /wrote this PR.*nothing posted/);
+    const comment = await post(base, { pr: { user: { login: 'dev' } } });
+    assert.deepEqual(comment.failures, []);
+    assert.equal(comment.calls.created.length, 1);
+    const other = await post({ ...base, event: 'REQUEST_CHANGES' }, { pr: { user: { login: 'author' } } });
+    assert.equal(other.calls.created.length, 1);
+  });
+
+  it('a review already stored for the same request and actor is reported, not posted again', async () => {
+    const stored = { id: 77, state: 'COMMENTED', html_url: 'https://example.invalid/r/77', user: { login: BOT }, body: 'x\n\n<!-- ai-review-requested-by: dev; request: req-1 -->' };
+    const again = await post({ ...base, request: 'req-1' }, { reviews: [stored], pr: { head: { sha: 'b'.repeat(40) } } });
+    assert.deepEqual(again.failures, [], 'a re-run after the head moved still reports the stored review');
+    assert.equal(again.calls.created.length, 0);
+    assert.equal(again.outputs.review_url, 'https://example.invalid/r/77');
+    for (const [name, body, login] of [
+      ['another request', 'x\n\n<!-- ai-review-requested-by: dev; request: req-2 -->', BOT],
+      ['another actor', 'x\n\n<!-- ai-review-requested-by: carl; request: req-1 -->', BOT],
+      ['not the bot', 'x\n\n<!-- ai-review-requested-by: dev; request: req-1 -->', 'mallory'],
+    ]) {
+      const r = await post({ ...base, request: 'req-1' }, { reviews: [{ ...stored, body, user: { login } }] });
+      assert.equal(r.calls.created.length, 1, name);
+      assert.match(r.calls.created[0].body, /request: req-1 -->$/, name);
+    }
+  });
+
+  it('reads back after a failed post: a stored review is success, an unreadable list is not "nothing posted"', async () => {
+    const stored = { id: 78, state: 'COMMENTED', html_url: 'https://example.invalid/r/78', user: { login: BOT }, body: 'Ser bra ut.\n\n<!-- ai-review-requested-by: dev; request: req-3 -->' };
+    const lost = await post({ ...base, request: 'req-3' }, { createFails: { status: 502, message: 'Bad gateway' }, reviewsAfter: [stored] });
+    assert.deepEqual(lost.failures, []);
+    assert.equal(lost.outputs.review_url, 'https://example.invalid/r/78');
+    assert.match(lost.warnings[0], /stored/);
+    const unknown = await post({ ...base, request: 'req-3' }, { createFails: { status: 502, message: 'Bad gateway' }, readBackFails: true });
+    assert.match(unknown.failures[0], /could not be read back; check the PR/);
+    const refused = await post({ ...base, request: 'req-3' }, { createFails: { status: 422, message: 'Unprocessable' }, reviewsAfter: [] });
+    assert.match(refused.failures[0], /HTTP 422.*nothing posted/);
+  });
+
+  it('refuses a malformed request id', async () => {
+    const r = await post({ ...base, request: 'bad id!' });
+    assert.equal(r.calls.created.length, 0);
+    assert.match(r.failures[0], /request must be/);
+  });});

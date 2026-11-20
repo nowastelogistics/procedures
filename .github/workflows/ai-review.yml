@@ -62,8 +62,10 @@ jobs:
             }
             if (r.dismiss_review_id !== undefined && (!Number.isInteger(r.dismiss_review_id) || r.dismiss_review_id < 1)) return 'dismiss_review_id must be a positive integer';
             if (r.dismiss_message !== undefined && (typeof r.dismiss_message !== 'string' || !r.dismiss_message.trim())) return 'dismiss_message must be non-empty text';
+            if (r.request !== undefined && !/^[A-Za-z0-9-]{1,64}$/.test(String(r.request))) return 'request must be 1-64 letters, digits or hyphens';
             return null;
           };
+          const MARK = /(?:^|\n)[ \t]*<!-- ai-review-requested-by: ([A-Za-z0-9-]+)(?:; request: ([A-Za-z0-9-]+))? -->[ \t\r\n]*$/;
 
           if (!Number.isInteger(pull_number) || pull_number < 1) return core.setFailed('pr must be a positive integer');
           let review;
@@ -76,35 +78,62 @@ jobs:
           const problem = validate(review);
           if (problem) return core.setFailed(`${problem}; nothing posted`);
 
-          // The same refresh post-review.js did before dispatching, repeated because the PR may
-          // have moved while the run was queued.
-          const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number });
-          if (pr.state !== 'open') return core.setFailed(`PR is ${pr.state}; nothing posted`);
-          if (pr.head.sha !== review.commit_id) return core.setFailed(`head moved: reviewed ${review.commit_id}, now ${pr.head.sha}; nothing posted`);
-          const reviews = await github.paginate(github.rest.pulls.listReviews, { owner, repo, pull_number, per_page: 100 });
-          const approvals = reviews.filter((r) => r.state === 'APPROVED' && r.user && r.user.login !== actor);
-          if (approvals.length) return core.setFailed(approvals.map((r) => `APPROVED by ${r.user.login} at ${r.submitted_at}; nothing posted`).join('\n'));
-
-          // Only the known fields travel on, so the payload cannot smuggle other API parameters.
-          const comments = (review.comments || []).map((c) => {
-            const out = { path: c.path, line: c.line, side: c.side || 'RIGHT', body: c.body };
-            if (c.start_line !== undefined) Object.assign(out, { start_line: c.start_line, start_side: c.start_side || out.side });
-            return out;
+          // Each dispatch carries a request id (a re-run of this run reuses it), written into the
+          // review's end marker, so a review GitHub stored before its answer was lost is found again
+          // instead of posted twice.
+          const request = review.request || `run-${context.runId}`;
+          const listReviews = () => github.paginate(github.rest.pulls.listReviews, { owner, repo, pull_number, per_page: 100 });
+          const postedFor = (list) => list.find((r) => {
+            const m = r.user && r.user.login === BOT && MARK.exec(String(r.body || ''));
+            return m && m[2] === request && m[1].toLowerCase() === String(actor).toLowerCase();
           });
-          // Who asked for the review, from GitHub's own actor, invisible on the page: the
-          // agent-skills review queue reads it to count the review as that person's.
-          const body = `${review.body}\n\n<!-- ai-review-requested-by: ${actor} -->`;
-          let created;
-          try {
-            ({ data: created } = await github.rest.pulls.createReview({
-              owner, repo, pull_number, commit_id: review.commit_id, event: review.event, body, comments,
-            }));
-          } catch (e) {
-            return core.setFailed(`GitHub refused the review (HTTP ${e.status}): ${e.message}; nothing posted`);
+          const report = (r, how) => {
+            core.setOutput('review_id', String(r.id));
+            core.setOutput('review_url', r.html_url);
+            core.info(`${r.state} ${r.html_url} (requested by ${actor}${how})`);
+          };
+
+          const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number });
+          const reviews = await listReviews();
+          let created = postedFor(reviews);
+          if (created) report(created, '; already posted by an earlier attempt, not posted again');
+          else {
+            // The same refresh post-review.js did before dispatching, repeated because the PR may
+            // have moved while the run was queued.
+            if (pr.state !== 'open') return core.setFailed(`PR is ${pr.state}; nothing posted`);
+            if (pr.head.sha !== review.commit_id) return core.setFailed(`head moved: reviewed ${review.commit_id}, now ${pr.head.sha}; nothing posted`);
+            const approvals = reviews.filter((r) => r.state === 'APPROVED' && r.user && r.user.login !== actor);
+            if (approvals.length) return core.setFailed(approvals.map((r) => `APPROVED by ${r.user.login} at ${r.submitted_at}; nothing posted`).join('\n'));
+            // GitHub refuses changes requested on your own PR; the bot must not do it for you either.
+            if (review.event === 'REQUEST_CHANGES' && pr.user && String(pr.user.login).toLowerCase() === String(actor).toLowerCase()) {
+              return core.setFailed(`${actor} wrote this PR: changes cannot be requested on your own PR, post it as COMMENT; nothing posted`);
+            }
+
+            // Only the known fields travel on, so the payload cannot smuggle other API parameters.
+            const comments = (review.comments || []).map((c) => {
+              const out = { path: c.path, line: c.line, side: c.side || 'RIGHT', body: c.body };
+              if (c.start_line !== undefined) Object.assign(out, { start_line: c.start_line, start_side: c.start_side || out.side });
+              return out;
+            });
+            // Who asked for the review, from GitHub's own actor, invisible on the page: the
+            // agent-skills review queue reads it to count the review as that person's.
+            const body = `${review.body}\n\n<!-- ai-review-requested-by: ${actor}; request: ${request} -->`;
+            try {
+              ({ data: created } = await github.rest.pulls.createReview({
+                owner, repo, pull_number, commit_id: review.commit_id, event: review.event, body, comments,
+              }));
+            } catch (e) {
+              // An error can come after GitHub stored the review: read back before calling it a failure.
+              let stored;
+              try { stored = postedFor(await listReviews()); } catch (_) {
+                return core.setFailed(`posting answered HTTP ${e.status} and the reviews could not be read back; check the PR before posting again`);
+              }
+              if (!stored) return core.setFailed(`GitHub refused the review (HTTP ${e.status}): ${e.message}; nothing posted`);
+              created = stored;
+              core.warning(`posting answered HTTP ${e.status}, but the review was stored`);
+            }
+            report(created, '');
           }
-          core.setOutput('review_id', String(created.id));
-          core.setOutput('review_url', created.html_url);
-          core.info(`${created.state} ${created.html_url} (requested by ${actor})`);
 
           // A COMMENT does not clear the bot's earlier changes request, so post-review.js asks for it
           // to be dismissed. Only an active changes request the bot posted for this same actor is
@@ -112,7 +141,7 @@ jobs:
           if (review.dismiss_review_id !== undefined) {
             const id = review.dismiss_review_id;
             const old = reviews.find((r) => r.id === id);
-            const by = old && /<!-- ai-review-requested-by: ([A-Za-z0-9-]+) -->\s*$/.exec(String(old.body || ''));
+            const by = old && MARK.exec(String(old.body || ''));
             if (!old || !old.user || old.user.login !== BOT || old.state !== 'CHANGES_REQUESTED' || !by || by[1].toLowerCase() !== String(actor).toLowerCase()) {
               core.warning(`review ${id} is not an active changes request by ${BOT} for ${actor}; not dismissed`);
             } else {

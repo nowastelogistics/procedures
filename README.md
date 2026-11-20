@@ -78,9 +78,12 @@ agent-skills helper `post-review.js` dispatches the repo's own `ai-review.yml` w
 review as base64 gzipped JSON; this workflow repeats the helper's refresh (PR open, head still
 the reviewed sha, nobody else approved), posts one review with its inline comments, and can
 dismiss an earlier changes request the bot posted for the same person. It never approves.
-The posted body ends with `<!-- ai-review-requested-by: <actor> -->`, taken from GitHub's actor and
+The posted body ends with `<!-- ai-review-requested-by: <actor>; request: <id> -->`, the actor taken from GitHub and
 not from the payload; the agent-skills review queue and weekly retro read it to count the review as
-that person's, so keep it as the body's last line. The token is the caller's,
+that person's, so keep it as the body's last line. The request id (`post-review.js` sends one per
+dispatch; a re-run reuses it) lets the workflow find a review GitHub stored although its answer was
+lost, so a retry never posts twice. A changes request on the dispatching actor's own PR is refused,
+as GitHub refuses it to the person. The token is the caller's,
 so a review can only land in the repo that dispatched it. A repo opts in with this caller on
 its default branch, under exactly this file name:
 
