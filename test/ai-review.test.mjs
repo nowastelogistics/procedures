@@ -92,7 +92,8 @@ describe('ai-review.yml', () => {
     assert.equal(c.commit_id, SHA);
     assert.equal(c.event, 'REQUEST_CHANGES');
     assert.equal(c.pull_number, 7);
-    assert.equal(c.body, 'Ser bra ut.\n\n<!-- ai-review-requested-by: dev; request: run-4242 -->', 'the body is kept and names the dispatching actor, from GitHub, not the payload, and the request');
+    assert.equal(c.body, 'Ser bra ut.\n\n<sub>🤖 AI-review på uppdrag av [dev](https://github.com/dev)</sub>\n<!-- ai-review-requested-by: dev; request: run-4242 -->', 'the body is kept, says visibly on whose behalf (a link, no @-mention) and ends with the marker naming the actor and the request');
+    assert.doesNotMatch(c.body, /@dev/);
     assert.deepEqual(c.comments, [
       { path: 'A.cs', line: 12, side: 'RIGHT', body: 'Måste ändras.' },
       { path: 'B.cs', line: 5, side: 'LEFT', body: 'Flera rader.', start_line: 3, start_side: 'LEFT' },

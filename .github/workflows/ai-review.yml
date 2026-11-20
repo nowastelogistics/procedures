@@ -115,9 +115,11 @@ jobs:
               if (c.start_line !== undefined) Object.assign(out, { start_line: c.start_line, start_side: c.start_side || out.side });
               return out;
             });
-            // Who asked for the review, from GitHub's own actor, invisible on the page: the
-            // agent-skills review queue reads it to count the review as that person's.
-            const body = `${review.body}\n\n<!-- ai-review-requested-by: ${actor}; request: ${request} -->`;
+            // Who asked for the review, from GitHub's own actor: visible to the reader (a profile link,
+            // not an @-mention, so nobody is notified), then the invisible end marker the agent-skills
+            // review queue reads to count the review as that person's.
+            const by = `<sub>🤖 AI-review på uppdrag av [${actor}](https://github.com/${actor})</sub>`;
+            const body = `${review.body}\n\n${by}\n<!-- ai-review-requested-by: ${actor}; request: ${request} -->`;
             try {
               ({ data: created } = await github.rest.pulls.createReview({
                 owner, repo, pull_number, commit_id: review.commit_id, event: review.event, body, comments,
