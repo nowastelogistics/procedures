@@ -102,7 +102,7 @@ jobs:
           // after reconciling on the PR.
           const attempt = Number(process.env.GITHUB_RUN_ATTEMPT || 1);
           if (!created && attempt > 1) {
-            return core.setFailed(`re-run (attempt ${attempt}) found no review with request ${request}; an earlier attempt may have stored one that is not listed yet, so a re-run never posts. Reconcile on the PR, then dispatch a new review; nothing posted`);
+            return core.setFailed(`outcome unknown: re-run (attempt ${attempt}) found no review with request ${request}, and an earlier attempt may have stored one that is not listed yet, so a re-run never posts. Reconcile on the PR, then dispatch a new review`);
           }
           if (created) report(created, '; already posted by an earlier attempt, not posted again');
           else {

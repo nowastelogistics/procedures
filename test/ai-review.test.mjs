@@ -226,7 +226,8 @@ describe('ai-review.yml', () => {
   it('a re-run never posts: it only reports a stored review, otherwise it waits for reconciliation', async () => {
     const r = await post({ ...base, request: 'req-9' }, { runAttempt: '2', reviews: [] });
     assert.equal(r.calls.created.length, 0);
-    assert.match(r.failures[0], /re-run \(attempt 2\) found no review with request req-9.*Reconcile on the PR, then dispatch a new review; nothing posted/);
+    assert.match(r.failures[0], /^outcome unknown: re-run \(attempt 2\) found no review with request req-9.*Reconcile on the PR, then dispatch a new review$/);
+    assert.doesNotMatch(r.failures[0], /nothing posted/, 'an earlier attempt may have posted: the re-run must not read as a refusal');
     const stored = { id: 79, state: 'COMMENTED', html_url: 'https://example.invalid/r/79', user: { login: BOT }, body: 'x\n\n<!-- ai-review-requested-by: dev; request: req-9 -->' };
     const found = await post({ ...base, request: 'req-9' }, { runAttempt: '3', reviews: [stored] });
     assert.deepEqual(found.failures, []);
