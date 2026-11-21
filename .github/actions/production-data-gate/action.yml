@@ -1,0 +1,14 @@
+name: Production data evidence
+description: Require reviewed production data evidence for the checked-out release commit
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        candidate=$(git rev-parse 'HEAD^{commit}')
+        release_file="$RUNNER_TEMP/production-data-release.json"
+        gh api --method GET "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" > "$release_file"
+        node "$GITHUB_ACTION_PATH/check.mjs" "$release_file" "$GITHUB_REF_NAME" "$candidate" "$GITHUB_REPOSITORY"
