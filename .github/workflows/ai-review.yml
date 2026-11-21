@@ -1,0 +1,176 @@
+name: AI review
+
+# Posts an AI review prepared on a developer's machine as github-actions[bot] instead of as
+# that developer (NWL-5376). The agent-skills helper post-review.js dispatches the caller's
+# `ai-review.yml` with the review; this workflow re-checks the PR and posts it with the
+# caller's GITHUB_TOKEN, so it lands in the caller's repo and nowhere else. It never approves:
+# an approval stays a person's act.
+on:
+  workflow_call:
+    inputs:
+      pr:
+        description: The pull request number.
+        required: true
+        type: number
+      payload:
+        description: >-
+          Base64 of gzipped JSON: commit_id (full sha that was reviewed), event (COMMENT or
+          REQUEST_CHANGES), body, optional comments [{path, line, side, start_line, start_side, body}],
+          optional dismiss_review_id and dismiss_message (an earlier changes request by
+          github-actions[bot] to dismiss after posting).
+        required: true
+        type: string
+
+jobs:
+  post:
+    runs-on: ['self-hosted', 'Linux']
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+
+    steps:
+    - name: Post review
+      id: post
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      env:
+        PR: ${{ inputs.pr }}
+        PAYLOAD: ${{ inputs.payload }}
+        ACTOR: ${{ github.actor }}
+      with:
+        script: |
+          const zlib = require('zlib');
+          const BOT = 'github-actions[bot]';
+          const { owner, repo } = context.repo;
+          const pull_number = Number(process.env.PR);
+          const actor = process.env.ACTOR;
+
+          const validate = (r) => {
+            if (!r || typeof r !== 'object' || Array.isArray(r)) return 'payload must be a JSON object';
+            if (!/^[0-9a-f]{40}$/.test(String(r.commit_id))) return 'commit_id must be the full 40-character sha that was reviewed';
+            if (!['COMMENT', 'REQUEST_CHANGES'].includes(r.event)) return 'event must be COMMENT or REQUEST_CHANGES: the bot never approves';
+            if (typeof r.body !== 'string' || !r.body.trim()) return 'body must be non-empty text';
+            if (r.comments !== undefined && !Array.isArray(r.comments)) return 'comments must be an array';
+            for (const [i, c] of (r.comments || []).entries()) {
+              const at = `comments[${i}]`;
+              if (!c || typeof c !== 'object') return `${at} must be an object`;
+              if (typeof c.path !== 'string' || !c.path) return `${at}.path is missing`;
+              if (!Number.isInteger(c.line) || c.line < 1) return `${at}.line must be a positive integer`;
+              if (c.side !== undefined && !['LEFT', 'RIGHT'].includes(c.side)) return `${at}.side must be LEFT or RIGHT`;
+              if (c.start_line !== undefined && (!Number.isInteger(c.start_line) || c.start_line < 1 || c.start_line >= c.line)) return `${at}.start_line must be a positive integer below line`;
+              if (c.start_side !== undefined && !['LEFT', 'RIGHT'].includes(c.start_side)) return `${at}.start_side must be LEFT or RIGHT`;
+              if (typeof c.body !== 'string' || !c.body.trim()) return `${at}.body must be non-empty text`;
+            }
+            if (r.dismiss_review_id !== undefined && (!Number.isInteger(r.dismiss_review_id) || r.dismiss_review_id < 1)) return 'dismiss_review_id must be a positive integer';
+            if (r.dismiss_message !== undefined && (typeof r.dismiss_message !== 'string' || !r.dismiss_message.trim())) return 'dismiss_message must be non-empty text';
+            if (r.request !== undefined && (typeof r.request !== 'string' || !/^[A-Za-z0-9-]{1,64}$/.test(r.request))) return 'request must be a string of 1-64 letters, digits or hyphens';
+            return null;
+          };
+          const MARK = /(?:^|\n)[ \t]*<!-- ai-review-requested-by: ([A-Za-z0-9-]+)(?:; request: ([A-Za-z0-9-]+))? -->[ \t\r\n]*$/;
+
+          if (!Number.isInteger(pull_number) || pull_number < 1) return core.setFailed('pr must be a positive integer');
+          let review;
+          try {
+            const raw = zlib.gunzipSync(Buffer.from(process.env.PAYLOAD || '', 'base64'), { maxOutputLength: 1 << 20 });
+            review = JSON.parse(raw.toString('utf8'));
+          } catch (e) {
+            return core.setFailed(`payload is not base64 gzipped JSON (${e.message}); nothing posted`);
+          }
+          const problem = validate(review);
+          if (problem) return core.setFailed(`${problem}; nothing posted`);
+
+          // Each dispatch carries a request id (a re-run of this run reuses it), written into the
+          // review's end marker, so a review GitHub stored before its answer was lost is found again
+          // instead of posted twice.
+          const request = review.request || `run-${context.runId}`;
+          const listReviews = () => github.paginate(github.rest.pulls.listReviews, { owner, repo, pull_number, per_page: 100 });
+          const postedFor = (list) => list.find((r) => {
+            const m = r.user && r.user.login === BOT && MARK.exec(String(r.body || ''));
+            return m && m[2] === request && m[1].toLowerCase() === String(actor).toLowerCase();
+          });
+          const report = (r, how) => {
+            core.setOutput('review_id', String(r.id));
+            core.setOutput('review_url', r.html_url);
+            core.info(`${r.state} ${r.html_url} (requested by ${actor}${how})`);
+          };
+
+          const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number });
+          const reviews = await listReviews();
+          let created = postedFor(reviews);
+          // A re-run reuses the request id, and an earlier attempt may have ended with an unknown
+          // outcome: GitHub may hold a review it does not list yet. An empty list proves nothing then,
+          // so a re-run only reports a stored review and never posts. A new review is a new dispatch,
+          // after reconciling on the PR.
+          const attempt = Number(process.env.GITHUB_RUN_ATTEMPT || 1);
+          if (!created && attempt > 1) {
+            return core.setFailed(`outcome unknown: re-run (attempt ${attempt}) found no review with request ${request}, and an earlier attempt may have stored one that is not listed yet, so a re-run never posts. Reconcile on the PR, then dispatch a new review`);
+          }
+          if (created) report(created, '; already posted by an earlier attempt, not posted again');
+          else {
+            // The same refresh post-review.js did before dispatching, repeated because the PR may
+            // have moved while the run was queued.
+            if (pr.state !== 'open') return core.setFailed(`PR is ${pr.state}; nothing posted`);
+            if (pr.head.sha !== review.commit_id) return core.setFailed(`head moved: reviewed ${review.commit_id}, now ${pr.head.sha}; nothing posted`);
+            const approvals = reviews.filter((r) => r.state === 'APPROVED' && r.user && r.user.login !== actor);
+            if (approvals.length) return core.setFailed(approvals.map((r) => `APPROVED by ${r.user.login} at ${r.submitted_at}; nothing posted`).join('\n'));
+            // GitHub refuses changes requested on your own PR; the bot must not do it for you either.
+            if (review.event === 'REQUEST_CHANGES' && pr.user && String(pr.user.login).toLowerCase() === String(actor).toLowerCase()) {
+              return core.setFailed(`${actor} wrote this PR: changes cannot be requested on your own PR, post it as COMMENT; nothing posted`);
+            }
+
+            // Only the known fields travel on, so the payload cannot smuggle other API parameters.
+            const comments = (review.comments || []).map((c) => {
+              const out = { path: c.path, line: c.line, side: c.side || 'RIGHT', body: c.body };
+              if (c.start_line !== undefined) Object.assign(out, { start_line: c.start_line, start_side: c.start_side || out.side });
+              return out;
+            });
+            // Who asked for the review, from GitHub's own actor: visible to the reader (a profile link,
+            // not an @-mention, so nobody is notified), then the invisible end marker the agent-skills
+            // review queue reads to count the review as that person's.
+            const by = `<sub>🤖 AI-review på uppdrag av [${actor}](https://github.com/${actor})</sub>`;
+            const body = `${review.body}\n\n${by}\n<!-- ai-review-requested-by: ${actor}; request: ${request} -->`;
+            try {
+              ({ data: created } = await github.rest.pulls.createReview({
+                owner, repo, pull_number, commit_id: review.commit_id, event: review.event, body, comments,
+              }));
+            } catch (e) {
+              // An error can come after GitHub stored the review, and the list can show it late: read
+              // back a few times. Only a 4xx answer is a refusal; any other outcome stays unknown, and a
+              // new dispatch (a new request id) could post a copy, so the run says to reconcile first.
+              const refused = e.status >= 400 && e.status < 500 && e.status !== 408 && e.status !== 429;
+              const runUrl = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${owner}/${repo}/actions/runs/${context.runId}`;
+              const unknown = `outcome unknown: posting answered ${e.status ? `HTTP ${e.status}` : e.message}`;
+              const waitMs = Number(process.env.AI_REVIEW_READBACK_MS || 3000);
+              let stored = null;
+              for (let attempt = 0; attempt < (refused ? 1 : 4) && !stored; attempt++) {
+                if (attempt) await new Promise((done) => setTimeout(done, waitMs));
+                try { stored = postedFor(await listReviews()); } catch (_) {
+                  if (!refused) return core.setFailed(`${unknown} and the reviews could not be read back; reconcile with ${runUrl} on the PR before posting again`);
+                  break;
+                }
+              }
+              if (!stored && refused) return core.setFailed(`GitHub refused the review (HTTP ${e.status}): ${e.message}; nothing posted`);
+              if (!stored) return core.setFailed(`${unknown} and no review with request ${request} is listed yet; reconcile with ${runUrl} on the PR before posting again`);
+              created = stored;
+              core.warning(`posting answered ${e.status ? `HTTP ${e.status}` : e.message}, but the review was stored`);
+            }
+            report(created, '');
+          }
+
+          // A COMMENT does not clear the bot's earlier changes request, so post-review.js asks for it
+          // to be dismissed. Only an active changes request the bot posted for this same actor is
+          // ever dismissed: a colleague's AI review stays theirs.
+          if (review.dismiss_review_id !== undefined) {
+            const id = review.dismiss_review_id;
+            const old = reviews.find((r) => r.id === id);
+            const by = old && MARK.exec(String(old.body || ''));
+            if (!old || !old.user || old.user.login !== BOT || old.state !== 'CHANGES_REQUESTED' || !by || by[1].toLowerCase() !== String(actor).toLowerCase()) {
+              core.warning(`review ${id} is not an active changes request by ${BOT} for ${actor}; not dismissed`);
+            } else {
+              try {
+                await github.rest.pulls.dismissReview({ owner, repo, pull_number, review_id: id, event: 'DISMISS', message: review.dismiss_message || 'Åtgärdat.' });
+                core.info(`dismissed the earlier changes request ${id}`);
+              } catch (e) {
+                core.warning(`review posted, but dismissing changes request ${id} failed (HTTP ${e.status}); it still blocks the PR, so dismiss it by hand`);
+              }
+            }
+          }
