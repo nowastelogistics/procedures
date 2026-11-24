@@ -3,6 +3,10 @@ name: NuGet build
 on:
   workflow_call:
     inputs:
+      use_ci_version:
+        description: Use the shared Git-ref version instead of GitVersion.
+        type: boolean
+        default: false
       project_file_path:
         required: true
         type: string
@@ -39,19 +43,22 @@ jobs:
         skip-lts-prepass: true
 
     - name: Install GitVersion
+      if: ${{ !inputs.use_ci_version }}
       uses: gittools/actions/gitversion/setup@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
       with:
         versionSpec: '6.x'
 
     - name: Download GitVersion config
+      if: ${{ !inputs.use_ci_version }}
       run: curl -L https://raw.githubusercontent.com/nowastelogistics/procedures/master/GitVersionConfig.yml -o GitVersionConfig.yml
 
     - name: Check for version-bump messages
       id: gitversion-optimization
-      if: github.repository == 'nowastelogistics/WMan.Api' && github.event_name == 'pull_request'
+      if: "!inputs.use_ci_version && github.repository == 'nowastelogistics/WMan.Api' && github.event_name == 'pull_request'"
       uses: nowastelogistics/procedures/.github/actions/gitversion-optimization@master
 
     - name: Determine Version
+      if: ${{ !inputs.use_ci_version }}
       id: gitversion
       uses: gittools/actions/gitversion/execute@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
       with:
@@ -59,10 +66,21 @@ jobs:
         overrideConfig: ${{ steps.gitversion-optimization.outputs.override-config }}
         disableCache: true
         
-    # Custom version format to match Docker / NuGet requirements. nuGetVersionV2 was removed from GitVersion v6
+    - name: Calculate CI version
+      if: inputs.use_ci_version
+      id: ci-version
+      uses: nowastelogistics/procedures/.github/actions/ci-version@ba59c9bf9c12fa3afa7feb2f60c15abb1b6c5ecb
+
+    # Keep the existing package format for callers using GitVersion.
     - name: Build custom version
       id: version
+      env:
+        CI_VERSION: ${{ steps.ci-version.outputs.version }}
       run: |
+        if [[ -n "$CI_VERSION" ]]; then
+          echo "GITVERSION=$CI_VERSION" >> "$GITHUB_ENV"
+          exit 0
+        fi
         major='${{ steps.gitversion.outputs.major }}'
         minor='${{ steps.gitversion.outputs.minor }}'
         patch='${{ steps.gitversion.outputs.patch }}'

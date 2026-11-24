@@ -59,21 +59,22 @@ test('only WMan.API pull requests use the guard, and its output is passed to Git
     const steps = workflow.jobs.build.steps;
     const guard = steps.find(step => step.id === 'gitversion-optimization');
     const version = steps.find(step => step.id === 'gitversion');
-    assert.equal(guard.if, "github.repository == 'nowastelogistics/WMan.Api' && github.event_name == 'pull_request'");
     assert.equal(guard.uses, 'nowastelogistics/procedures/.github/actions/gitversion-optimization@master');
     assert.equal(version.with.overrideConfig, '${{ steps.gitversion-optimization.outputs.override-config }}');
     assert.ok(steps.indexOf(guard) < steps.indexOf(version));
-    const expression = new Parser(new Lexer(guard.if).lex().tokens, ['github'], []).parse();
-    for (const [repository, event, expected] of [
-      ['nowastelogistics/WMan.Api', 'pull_request', true],
-      ['nowastelogistics/WMan.Api', 'push', false],
-      ['nowastelogistics/Other', 'pull_request', false]
+    const expression = new Parser(new Lexer(guard.if).lex().tokens, ['github', 'inputs'], []).parse();
+    for (const [repository, event, useCiVersion, expected] of [
+      ['nowastelogistics/WMan.Api', 'pull_request', false, true],
+      ['nowastelogistics/WMan.Api', 'pull_request', true, false],
+      ['nowastelogistics/WMan.Api', 'push', false, false],
+      ['nowastelogistics/Other', 'pull_request', false, false]
     ]) {
       const github = new data.Dictionary(
         { key: 'repository', value: new data.StringData(repository) },
         { key: 'event_name', value: new data.StringData(event) }
       );
-      const context = new data.Dictionary({ key: 'github', value: github });
+      const inputs = new data.Dictionary({ key: 'use_ci_version', value: new data.BooleanData(useCiVersion) });
+      const context = new data.Dictionary({ key: 'github', value: github }, { key: 'inputs', value: inputs });
       assert.equal(new Evaluator(expression, context, new Map()).evaluate().coerceString() === 'true', expected);
     }
   }
