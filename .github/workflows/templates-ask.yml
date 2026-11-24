@@ -41,46 +41,9 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Install GitVersion
-      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
-      uses: gittools/actions/gitversion/setup@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
-      with:
-        versionSpec: '6.x'
-
-    - name: Download GitVersion config
-      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
-      run: |
-        curl -L https://raw.githubusercontent.com/nowastelogistics/procedures/master/GitVersionConfig.yml -o GitVersionConfig.yml
-
-    - name: Determine Version
-      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
-      id: gitversion
-      uses: gittools/actions/gitversion/execute@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
-      with:
-        configFilePath: GitVersionConfig.yml
-        disableCache: true
-
-    # Custom version format to match Docker / NuGet requirements. nuGetVersionV2 was removed from GitVersion v6
-    - name: Build custom version
-      if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
-      run: |
-        major='${{ steps.gitversion.outputs.major }}'
-        minor='${{ steps.gitversion.outputs.minor }}'
-        patch='${{ steps.gitversion.outputs.patch }}'
-        label='${{ steps.gitversion.outputs.preReleaseLabel }}'
-        number='${{ steps.gitversion.outputs.commitsSinceVersionSource }}'
-
-        # zero-pad number to 5 digits (NuGet style)
-        padded=$(printf "%05d" "${number:-0}")
-
-        if [ -z "$label" ]; then
-          version="${major}.${minor}.${patch}"
-        else
-          version="${major}.${minor}.${patch}-${label}${padded}"
-        fi
-
-        echo "GITVERSION=$version" >> "$GITHUB_ENV"
-        echo "Computed version: $version"
+    - name: Calculate CI version
+      id: version
+      uses: nowastelogistics/procedures/.github/actions/ci-version@ba59c9bf9c12fa3afa7feb2f60c15abb1b6c5ecb
 
     - name: Setup .NET Core SDK
       uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -146,7 +109,7 @@ jobs:
     - name: Write version information
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       run: |
-        echo "{\"version\": \"${{ env.GITVERSION }}\"}" > version.json
+        echo "{\"version\": \"${{ steps.version.outputs.version }}\"}" > version.json
 
     - name: Archive Release
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
@@ -220,15 +183,15 @@ jobs:
           '{BuildEnvironment: "GitHub Actions", BuildNumber: $build_number, BuildUrl: $build_url, Branch: $branch, VcsType: "Git", VcsRoot: $vcs_root, VcsCommitNumber: $vcs_commit_number, VcsCommitUrl: $vcs_commit_url, Commits: $commits}' > "$build_information_file"
 
         octopus login --server "$OCTOPUS_SERVER" --api-key "$OCTOPUS_API_KEY"
-        octopus build-information upload --space "NoWaste" --package-id "${{ inputs.templates_name }}" --version "${{ env.GITVERSION }}" --file "$build_information_file" --overwrite-mode "ignore" --no-prompt
+        octopus build-information upload --space "NoWaste" --package-id "${{ inputs.templates_name }}" --version "${{ steps.version.outputs.version }}" --file "$build_information_file" --overwrite-mode "ignore" --no-prompt
 
     - name: Octopus Create release
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       run: |
           octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
-          octopus package zip create --id "${{ inputs.templates_name }}" --version "${{ env.GITVERSION }}" --include *.zip
-          octopus package upload --space "Spaces-1" --package "${{ inputs.templates_name }}.${{ env.GITVERSION }}.zip"
-          octopus release create --space "Spaces-1" --project "${{ inputs.templates_name }}" --version "${{ env.GITVERSION }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.templates_name }}:${{ env.GITVERSION }}"
+          octopus package zip create --id "${{ inputs.templates_name }}" --version "${{ steps.version.outputs.version }}" --include *.zip
+          octopus package upload --space "Spaces-1" --package "${{ inputs.templates_name }}.${{ steps.version.outputs.version }}.zip"
+          octopus release create --space "Spaces-1" --project "${{ inputs.templates_name }}" --version "${{ steps.version.outputs.version }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.templates_name }}:${{ steps.version.outputs.version }}"
 
           if ${{ steps.octopus-channel.outputs.autorelease }}; then
             project="${{ inputs.templates_name }}"
@@ -243,8 +206,8 @@ jobs:
                 tenant_args+=(--tenant "$tenant")
               fi
             done <<< "$tenant_names"
-            octopus release deploy --space "Spaces-1" --project "$project" --version "${{ env.GITVERSION }}" --environment "Development" "${tenant_args[@]}" --no-prompt
+            octopus release deploy --space "Spaces-1" --project "$project" --version "${{ steps.version.outputs.version }}" --environment "Development" "${tenant_args[@]}" --no-prompt
           fi
 
           echo '### Template release' >> $GITHUB_STEP_SUMMARY
-          echo 'Pushed new release of template **${{ inputs.templates_name }}** version **${{ env.GITVERSION }}** to Octopus' >> $GITHUB_STEP_SUMMARY
+          echo 'Pushed new release of template **${{ inputs.templates_name }}** version **${{ steps.version.outputs.version }}** to Octopus' >> $GITHUB_STEP_SUMMARY

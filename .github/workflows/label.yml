@@ -31,16 +31,9 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v3.0.0
-      with:
-        versionSpec: '5.x'
-
-    - name: Determine Version
-      uses: gittools/actions/gitversion/execute@v3.0.0
-      with:
-        useConfigFile: true
-        configFilePath: GitVersion.yml
+    - name: Calculate CI version
+      id: version
+      uses: nowastelogistics/procedures/.github/actions/ci-version@ba59c9bf9c12fa3afa7feb2f60c15abb1b6c5ecb
 
     - name: Install Octopus CLI
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
@@ -78,9 +71,9 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       run: |
           octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
-          octopus package zip create --id "${{ inputs.label_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}"
-          octopus package upload --space "Spaces-1" --package "${{ inputs.label_name }}.${{ env.GitVersion_NuGetVersionV2 }}.zip"
-          octopus release create --space "Spaces-1" --project "${{ inputs.label_name }}" --version "${{ env.GitVersion_NuGetVersionV2 }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.label_name }}:${{ env.GitVersion_NuGetVersionV2 }}"
+          octopus package zip create --id "${{ inputs.label_name }}" --version "${{ steps.version.outputs.version }}"
+          octopus package upload --space "Spaces-1" --package "${{ inputs.label_name }}.${{ steps.version.outputs.version }}.zip"
+          octopus release create --space "Spaces-1" --project "${{ inputs.label_name }}" --version "${{ steps.version.outputs.version }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.label_name }}:${{ steps.version.outputs.version }}"
 
           if ${{ steps.octopus-channel.outputs.autorelease }}; then
             project="${{ inputs.label_name }}"
@@ -95,8 +88,8 @@ jobs:
                 tenant_args+=(--tenant "$tenant")
               fi
             done <<< "$tenant_names"
-            octopus release deploy --space "Spaces-1" --project "$project" --version "${{ env.GitVersion_NuGetVersionV2 }}" --environment "Development" "${tenant_args[@]}" --no-prompt
+            octopus release deploy --space "Spaces-1" --project "$project" --version "${{ steps.version.outputs.version }}" --environment "Development" "${tenant_args[@]}" --no-prompt
           fi
 
           echo '### Template release' >> $GITHUB_STEP_SUMMARY
-          echo 'Pushed new release of template **${{ inputs.label_name }}** version **${{ env.GitVersion_NuGetVersionV2 }}** to Octopus' >> $GITHUB_STEP_SUMMARY
+          echo 'Pushed new release of template **${{ inputs.label_name }}** version **${{ steps.version.outputs.version }}** to Octopus' >> $GITHUB_STEP_SUMMARY

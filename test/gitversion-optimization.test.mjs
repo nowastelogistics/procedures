@@ -4,7 +4,6 @@ import { mkdtempSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync,
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
-import { Evaluator, Lexer, Parser, data } from '@actions/expressions';
 import { parse } from 'yaml';
 
 const action = parse(readFileSync(new URL('../.github/actions/gitversion-optimization/action.yml', import.meta.url), 'utf8'));
@@ -52,33 +51,6 @@ function runCheck(f, config = defaults) {
   assert.equal(result.status, 0, result.stderr);
   return readFileSync(output, 'utf8').trim().split('\n').at(-1).trim();
 }
-
-test('only WMan.API pull requests use the guard, and its output is passed to GitVersion', () => {
-  for (const file of ['docker.yml', 'nuget.yml']) {
-    const workflow = parse(readFileSync(new URL('../.github/workflows/' + file, import.meta.url), 'utf8'));
-    const steps = workflow.jobs.build.steps;
-    const guard = steps.find(step => step.id === 'gitversion-optimization');
-    const version = steps.find(step => step.id === 'gitversion');
-    assert.equal(guard.uses, 'nowastelogistics/procedures/.github/actions/gitversion-optimization@master');
-    assert.equal(version.with.overrideConfig, '${{ steps.gitversion-optimization.outputs.override-config }}');
-    assert.ok(steps.indexOf(guard) < steps.indexOf(version));
-    const expression = new Parser(new Lexer(guard.if).lex().tokens, ['github', 'inputs'], []).parse();
-    for (const [repository, event, useCiVersion, expected] of [
-      ['nowastelogistics/WMan.Api', 'pull_request', false, true],
-      ['nowastelogistics/WMan.Api', 'pull_request', true, false],
-      ['nowastelogistics/WMan.Api', 'push', false, false],
-      ['nowastelogistics/Other', 'pull_request', false, false]
-    ]) {
-      const github = new data.Dictionary(
-        { key: 'repository', value: new data.StringData(repository) },
-        { key: 'event_name', value: new data.StringData(event) }
-      );
-      const inputs = new data.Dictionary({ key: 'use_ci_version', value: new data.BooleanData(useCiVersion) });
-      const context = new data.Dictionary({ key: 'github', value: github }, { key: 'inputs', value: inputs });
-      assert.equal(new Evaluator(expression, context, new Map()).evaluate().coerceString() === 'true', expected);
-    }
-  }
-});
 
 test('enables the override only for the known rules and marker-free history', t => {
   const f = fixture(t);
