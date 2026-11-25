@@ -58,17 +58,33 @@ jobs:
         dotnet nuget add source --username ${{ secrets.nuget_github_server_username }} --password ${{ secrets.nuget_github_server_password }} --store-password-in-clear-text --name github ${{ secrets.nuget_github_server_url }}
 
     - name: Install validation tool
+      shell: bash
+      env:
+        TEMPLATE_VERSION: ${{ steps.version.outputs.version }}
       run: |
-        if [[ "$GITHUB_REF" == refs/heads/release* ]]; then
+        if [[ "$GITHUB_REF" == refs/heads/release/* ]]; then
+          prefix=""
+          if [[ "${GITHUB_REF#refs/heads/release/}" == *-* ]]; then
+            # The generator and templates workflows have independent run counters.
+            version_without_attempt="${TEMPLATE_VERSION%.*}"
+            prefix="${version_without_attempt%.*}."
+          fi
           validator_version=$(
             dotnet package search NoEffect.Generator --exact-match --prerelease --format json |
-              jq -r '.searchResult[].packages[] | select(.id | ascii_downcase == "noeffect.generator") | .version | select(contains("-rc"))' |
-              sort -V |
+              jq -r --arg prefix "$prefix" '
+                .searchResult[].packages[] | select(.id | ascii_downcase == "noeffect.generator") | .version |
+                select(if $prefix == "" then
+                  test("^[0-9]+[.][0-9]+[.][0-9]+-rc([0-9]+|[.][0-9]+[.][0-9]+)$"; "i")
+                else
+                  ascii_downcase | select(startswith($prefix | ascii_downcase)) |
+                  .[($prefix | length):] | test("^[0-9]+[.][0-9]+$")
+                end)' |
+              LC_ALL=C sort -fV |
               tail -n 1
           )
 
           if [[ -z "$validator_version" ]]; then
-            echo "No RC version of NoEffect.Generator was found."
+            echo "No matching NoEffect.Generator package was found for $GITHUB_REF." >&2
             exit 1
           fi
 
