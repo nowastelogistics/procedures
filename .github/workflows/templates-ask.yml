@@ -78,9 +78,9 @@ jobs:
                 else
                   ascii_downcase | select(startswith($prefix | ascii_downcase)) |
                   .[($prefix | length):] | test("^[0-9]+[.][0-9]+$")
-                end)' |
-              LC_ALL=C sort -fV |
-              tail -n 1
+                end) | [(ascii_downcase), .] | @tsv' |
+              LC_ALL=C sort -k1,1V |
+              tail -n 1 | cut -f2
           )
 
           if [[ -z "$validator_version" ]]; then
