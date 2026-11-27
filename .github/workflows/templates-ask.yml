@@ -63,22 +63,22 @@ jobs:
         TEMPLATE_VERSION: ${{ steps.version.outputs.version }}
       run: |
         if [[ "$GITHUB_REF" == refs/heads/release/* ]]; then
-          prefix=""
-          if [[ "${GITHUB_REF#refs/heads/release/}" == *-* ]]; then
-            # The generator and templates workflows have independent run counters.
-            version_without_attempt="${TEMPLATE_VERSION%.*}"
-            prefix="${version_without_attempt%.*}."
+          # The generator and templates workflows have independent run counters.
+          version_without_attempt="${TEMPLATE_VERSION%.*}"
+          prefix="${version_without_attempt%.*}"
+          suffix_pattern='^[.][0-9]+[.][0-9]+$'
+          if [[ "${GITHUB_REF#refs/heads/release/}" != *-* ]]; then
+            # Ordinary releases also accept legacy RCs for the same base version.
+            suffix_pattern='^([0-9]+|[.][0-9]+[.][0-9]+)$'
           fi
           validator_version=$(
             dotnet package search NoEffect.Generator --exact-match --prerelease --format json |
-              jq -r --arg prefix "$prefix" '
+              jq -r --arg prefix "$prefix" --arg suffix_pattern "$suffix_pattern" '
                 .searchResult[].packages[] | select(.id | ascii_downcase == "noeffect.generator") | .version |
-                select(if $prefix == "" then
-                  test("^[0-9]+[.][0-9]+[.][0-9]+-rc([0-9]+|[.][0-9]+[.][0-9]+)$"; "i")
-                else
+                select(
                   ascii_downcase | select(startswith($prefix | ascii_downcase)) |
-                  .[($prefix | length):] | test("^[0-9]+[.][0-9]+$")
-                end) | [(ascii_downcase), .] | @tsv' |
+                  .[($prefix | length):] | test($suffix_pattern)
+                ) | [(ascii_downcase), .] | @tsv' |
               LC_ALL=C sort -k1,1V |
               tail -n 1 | cut -f2
           )

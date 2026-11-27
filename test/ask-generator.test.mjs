@@ -55,10 +55,23 @@ test('a named release with only RC packages fails before installation', () => {
   assert.doesNotMatch(result.stdout, /tool install/);
 });
 
-test('ordinary release still chooses the latest RC, including legacy RC versions', () => {
-  for (const [available, expected] of [[versions, '2026.48.1-rc.999.1'], [['2026.48.1-rc00003'], '2026.48.1-rc00003']]) {
-    const result = runInstall('refs/heads/release/2026.48.1', available);
+test('ordinary release installs the latest RC for its base version', () => {
+  const cases = [
+    [['2026.48.6-rc00826', '2026.47.1-rc.2721.1'], '2026.47.1-rc.2721.1'],
+    [['2026.48.6-rc.2722.1', '2026.47.1-rc.2721.1', '2026.47.1-rc.2721.2'], '2026.47.1-rc.2721.2'],
+    [['2026.48.6-rc00826', '2026.47.1-rc00003'], '2026.47.1-rc00003'],
+  ];
+
+  for (const [available, expected] of cases) {
+    const result = runInstall('refs/heads/release/2026.47.1', available);
     assert.equal(result.status, 0, result.stderr);
     assert.ok(result.stdout.trimEnd().endsWith('--version ' + expected), result.stdout);
   }
+});
+
+test('ordinary release fails before installation when only another base version is available', () => {
+  const result = runInstall('refs/heads/release/2026.47.1', ['2026.48.6-rc00826', '2026.48.6-rc.2722.1']);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /No matching NoEffect.Generator/);
+  assert.doesNotMatch(result.stdout, /tool install/);
 });
