@@ -77,7 +77,7 @@ jobs:
     name: Build, package, and create Octopus release
     runs-on: ubuntu-latest
     outputs:
-      gitversion: ${{ steps.version.outputs.gitversion }}
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - name: Checkout source
@@ -85,55 +85,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install GitVersion
-        uses: gittools/actions/gitversion/setup@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
-        with:
-          versionSpec: 6.x
-
-      - name: Download GitVersion config
-        run: curl -L https://raw.githubusercontent.com/nowastelogistics/procedures/master/GitVersionConfig.yml -o GitVersionConfig.yml
-
-      - name: Show GitVersion config
-        run: |
-          nl -ba GitVersionConfig.yml | sed -n '1,120p'
-
-      - name: Determine version
-        id: gitversion
-        uses: gittools/actions/gitversion/execute@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
-        with:
-          configFilePath: GitVersionConfig.yml
-
-      - name: Show GitVersion output
-        run: |
-          echo "SemVer=${{ steps.gitversion.outputs.semVer }}"
-          echo "FullSemVer=${{ steps.gitversion.outputs.fullSemVer }}"
-          echo "PreReleaseTag=${{ steps.gitversion.outputs.preReleaseTag }}"
-          echo "PreReleaseLabel=${{ steps.gitversion.outputs.preReleaseLabel }}"
-          echo "PreReleaseNumber=${{ steps.gitversion.outputs.preReleaseNumber }}"
-          echo "CommitsSinceVersionSource=${{ steps.gitversion.outputs.commitsSinceVersionSource }}"
-          echo "GitBranchName=${{ steps.gitversion.outputs.branchName }}"
-
-      - name: Build custom package version
+      - name: Calculate CI version
         id: version
-        shell: bash
-        run: |
-          major='${{ steps.gitversion.outputs.major }}'
-          minor='${{ steps.gitversion.outputs.minor }}'
-          patch='${{ steps.gitversion.outputs.patch }}'
-          label='${{ steps.gitversion.outputs.preReleaseLabel }}'
-          number='${{ steps.gitversion.outputs.commitsSinceVersionSource }}'
-
-          padded=$(printf "%05d" "${number:-0}")
-
-          if [ -z "$label" ]; then
-            version="${major}.${minor}.${patch}"
-          else
-            version="${major}.${minor}.${patch}-${label}${padded}"
-          fi
-
-          echo "GITVERSION=$version" >> "$GITHUB_ENV"
-          echo "gitversion=$version" >> "$GITHUB_OUTPUT"
-          echo "Computed version: $version"
+        uses: nowastelogistics/procedures/.github/actions/ci-version@ba59c9bf9c12fa3afa7feb2f60c15abb1b6c5ecb
 
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -165,7 +119,7 @@ jobs:
         run: |
           cat > "${{ inputs.publish_path }}/version.json" <<EOF
           {
-            "version": "${{ env.GITVERSION }}",
+            "version": "${{ steps.version.outputs.version }}",
             "commit": "${{ github.sha }}",
             "repository": "${{ github.repository }}"
           }
@@ -206,7 +160,7 @@ jobs:
         env:
           PACKAGE_NAME: ${{ inputs.package_name }}
           OCTOPUS_PROJECT_NAME: ${{ inputs.octopus_project_name }}
-          PACKAGE_VERSION: ${{ env.GITVERSION }}
+          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
           OCTOPUS_SPACE: ${{ inputs.octopus_space }}
           OCTOPUS_SERVER_URL: ${{ secrets.octopus_server_url }}
           OCTOPUS_API_KEY: ${{ secrets.octopus_server_apikey }}

@@ -1,0 +1,15 @@
+name: Nowaste CI version
+description: Calculate the build version from the caller's Git ref and workflow run.
+outputs:
+  version:
+    description: Version for the build and its artifacts.
+    value: ${{ steps.calculate.outputs.version }}
+runs:
+  using: composite
+  steps:
+    - id: calculate
+      shell: pwsh
+      run: |
+        $version = & (Join-Path $env:GITHUB_ACTION_PATH '../../../scripts/ci-version.ps1')
+        "version=$version" >> $env:GITHUB_OUTPUT
+        Write-Host "Build version: $version"

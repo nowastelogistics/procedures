@@ -38,48 +38,9 @@ jobs:
           11.x
         skip-lts-prepass: true
 
-    - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
-      with:
-        versionSpec: '6.x'
-
-    - name: Download GitVersion config
-      run: curl -L https://raw.githubusercontent.com/nowastelogistics/procedures/master/GitVersionConfig.yml -o GitVersionConfig.yml
-
-    - name: Check for version-bump messages
-      id: gitversion-optimization
-      if: github.repository == 'nowastelogistics/WMan.Api' && github.event_name == 'pull_request'
-      uses: nowastelogistics/procedures/.github/actions/gitversion-optimization@master
-
-    - name: Determine Version
-      id: gitversion
-      uses: gittools/actions/gitversion/execute@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
-      with:
-        configFilePath: GitVersionConfig.yml
-        overrideConfig: ${{ steps.gitversion-optimization.outputs.override-config }}
-        disableCache: true
-        
-    # Custom version format to match Docker / NuGet requirements. nuGetVersionV2 was removed from GitVersion v6
-    - name: Build custom version
+    - name: Calculate CI version
       id: version
-      run: |
-        major='${{ steps.gitversion.outputs.major }}'
-        minor='${{ steps.gitversion.outputs.minor }}'
-        patch='${{ steps.gitversion.outputs.patch }}'
-        label='${{ steps.gitversion.outputs.preReleaseLabel }}'
-        number='${{ steps.gitversion.outputs.commitsSinceVersionSource }}'
-
-        # zero-pad number to 5 digits (NuGet style)
-        padded=$(printf "%05d" "${number:-0}")
-
-        if [ -z "$label" ]; then
-          version="${major}.${minor}.${patch}"
-        else
-          version="${major}.${minor}.${patch}-${label}${padded}"
-        fi
-
-        echo "GITVERSION=$version" >> "$GITHUB_ENV"
-        echo "Computed version: $version"
+      uses: nowastelogistics/procedures/.github/actions/ci-version@ba59c9bf9c12fa3afa7feb2f60c15abb1b6c5ecb
 
     - name: Prepare NuGet sources
       run: |
@@ -144,13 +105,13 @@ jobs:
 
     - name: Build & Pack NuGet
       run: |
-        dotnet build ${{ inputs.project_file_path }} -p:Version=${{ env.GITVERSION }} --configuration Release
-        dotnet pack ${{ inputs.project_file_path }} -p:Version=${{ env.GITVERSION }} --configuration Release --output nupkgs
+        dotnet build ${{ inputs.project_file_path }} -p:Version=${{ steps.version.outputs.version }} --configuration Release
+        dotnet pack ${{ inputs.project_file_path }} -p:Version=${{ steps.version.outputs.version }} --configuration Release --output nupkgs
 
     - name: Create NuGet release
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       run: |
-        dotnet nuget push nupkgs/${{ inputs.project_nuget_name }}.${{ env.GITVERSION }}.nupkg --api-key ${{ secrets.nuget_github_server_password }} --source github --skip-duplicate
+        dotnet nuget push nupkgs/${{ inputs.project_nuget_name }}.${{ steps.version.outputs.version }}.nupkg --api-key ${{ secrets.nuget_github_server_password }} --source github --skip-duplicate
 
         echo '### NuGet package' >> $GITHUB_STEP_SUMMARY
-        echo 'Pushed new release of package **${{ inputs.project_nuget_name }}** version **${{ env.GITVERSION }}** to feed' >> $GITHUB_STEP_SUMMARY
+        echo 'Pushed new release of package **${{ inputs.project_nuget_name }}** version **${{ steps.version.outputs.version }}** to feed' >> $GITHUB_STEP_SUMMARY

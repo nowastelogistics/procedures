@@ -61,7 +61,7 @@ jobs:
     # runs-on: ['self-hosted', 'Linux']
     runs-on: ubuntu-24.04
     outputs:
-      gitversion: ${{ steps.version.outputs.gitversion }}
+      version: ${{ steps.version.outputs.version }}
       image_digest: ${{ steps.promote.outputs.digest }}
     permissions:
       contents: write
@@ -83,63 +83,9 @@ jobs:
           11.x
         skip-lts-prepass: true
 
-    - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
-      with:
-        versionSpec: '6.x'
-
-    - name: Download GitVersion config
-      run: curl -L https://raw.githubusercontent.com/nowastelogistics/procedures/master/GitVersionConfig.yml -o GitVersionConfig.yml
-      
-    - name: Show config with line numbers
-      run: |
-        nl -ba GitVersionConfig.yml | sed -n '1,120p'
-
-    - name: Check for version-bump messages
-      id: gitversion-optimization
-      if: github.repository == 'nowastelogistics/WMan.Api' && github.event_name == 'pull_request'
-      uses: nowastelogistics/procedures/.github/actions/gitversion-optimization@master
-
-    - name: Determine Version
-      id: gitversion
-      uses: gittools/actions/gitversion/execute@bc6623af8fc07d5a8903052dd46da33403eec8e8 # v4.5.0
-      with:
-        configFilePath: GitVersionConfig.yml
-        overrideConfig: ${{ steps.gitversion-optimization.outputs.override-config }}
-        
-    - run: |
-        echo "SemVer=${{ steps.gitversion.outputs.semVer }}"
-        echo "SemVerFull=${{ steps.gitversion.outputs.fullSemVer }}"
-        echo "SemVer=${{ steps.gitversion.outputs.semVer }}"
-        echo "SemVerFull=${{ steps.gitversion.outputs.fullSemVer }}"
-        echo "PreReleaseTag=${{ steps.gitversion.outputs.preReleaseTag }}"
-        echo "PreReleaseLabel=${{ steps.gitversion.outputs.preReleaseLabel }}"
-        echo "PreReleaseNumber=${{ steps.gitversion.outputs.preReleaseNumber }}"
-        echo "CommitsSinceVersionSource=${{ steps.gitversion.outputs.commitsSinceVersionSource }}"
-        echo "GitBranchName=${{ steps.gitversion.outputs.branchName }}"
-        
-    # Custom version format to match Docker / NuGet requirements. nuGetVersionV2 was removed from GitVersion v6
-    - name: Build custom version
+    - name: Calculate CI version
       id: version
-      run: |
-        major='${{ steps.gitversion.outputs.major }}'
-        minor='${{ steps.gitversion.outputs.minor }}'
-        patch='${{ steps.gitversion.outputs.patch }}'
-        label='${{ steps.gitversion.outputs.preReleaseLabel }}'
-        number='${{ steps.gitversion.outputs.commitsSinceVersionSource }}'
-
-        # zero-pad number to 5 digits (NuGet style)
-        padded=$(printf "%05d" "${number:-0}")
-
-        if [ -z "$label" ]; then
-          version="${major}.${minor}.${patch}"
-        else
-          version="${major}.${minor}.${patch}-${label}${padded}"
-        fi
-
-        echo "GITVERSION=$version" >> "$GITHUB_ENV"
-        echo "gitversion=$version" >> "$GITHUB_OUTPUT"
-        echo "Computed version: $version"
+      uses: nowastelogistics/procedures/.github/actions/ci-version@ba59c9bf9c12fa3afa7feb2f60c15abb1b6c5ecb
 
     - name: Setup buildx
       uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -169,8 +115,8 @@ jobs:
           echo "cache_ref=$cache_ref" >> "$GITHUB_OUTPUT"
           {
             echo "publish_tags<<EOF"
-            echo "$image_repo:${{ env.GITVERSION }}"
-            if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "$image_repo:${{ steps.version.outputs.version }}"
+            if [[ $GITHUB_REF == refs/tags/* && $GITHUB_REF_NAME != *-* ]]; then
               echo "$image_repo:latest"
             fi
             echo "EOF"
@@ -200,7 +146,7 @@ jobs:
           NUGET_GITHUB_SERVER_URL=${{ secrets.nuget_github_server_url }}
           NUGET_GITHUB_SERVER_USERNAME=${{ secrets.nuget_github_server_username }}
           NUGET_GITHUB_SERVER_PASSWORD=${{ secrets.nuget_github_server_password }}
-          GITVERSION=${{ env.GITVERSION }}
+          GITVERSION=${{ steps.version.outputs.version }}
         cache-from: type=registry,ref=${{ steps.image.outputs.cache_ref }}
         cache-to: type=registry,ref=${{ steps.image.outputs.cache_ref }},mode=max
         provenance: false
@@ -338,7 +284,7 @@ jobs:
         registry-password: ${{ secrets.docker_server_password }}
         format: spdx-json
         syft-version: v1.42.4
-        artifact-name: ${{ inputs.docker_image_name }}-sbom-${{ needs.build.outputs.gitversion }}
+        artifact-name: ${{ inputs.docker_image_name }}-sbom-${{ needs.build.outputs.version }}
         output-file: ${{ github.workspace }}/${{ inputs.docker_image_name }}-sbom.spdx.json
         upload-release-assets: false
 
@@ -461,12 +407,12 @@ jobs:
           '{BuildEnvironment: "GitHub Actions", BuildNumber: $build_number, BuildUrl: $build_url, Branch: $branch, VcsType: "Git", VcsRoot: $vcs_root, VcsCommitNumber: $vcs_commit_number, VcsCommitUrl: $vcs_commit_url, Commits: $commits}' > "$build_information_file"
 
         octopus login --server "$OCTOPUS_SERVER" --api-key "$OCTOPUS_API_KEY"
-        octopus build-information upload --space "NoWaste" --package-id "${{ inputs.docker_image_name }}" --version "${{ needs.build.outputs.gitversion }}" --file "$build_information_file" --overwrite-mode "ignore" --no-prompt
+        octopus build-information upload --space "NoWaste" --package-id "${{ inputs.docker_image_name }}" --version "${{ needs.build.outputs.version }}" --file "$build_information_file" --overwrite-mode "ignore" --no-prompt
 
     - name: Octopus Create release
       env:
         IMAGE_DIGEST: ${{ needs.build.outputs.image_digest }}
-        GITVERSION: ${{ needs.build.outputs.gitversion }}
+        GITVERSION: ${{ needs.build.outputs.version }}
         RELEASE_NOTES_FILE: ${{ steps.octopus-channel.outputs.notes_file }}
       run: |
           octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"

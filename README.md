@@ -1,5 +1,24 @@
 # Shared workflows
 
+## Build versions
+
+Docker, NuGet, Windows deployments, web apps, templates and labels use the
+`ci-version` PowerShell action. The caller's Git ref selects the version.
+Examples below use workflow run 842, attempt 1.
+
+| Git ref | Artifact version |
+| --- | --- |
+| Tag `2026.48.1` or `2026.48.1-beta` | `2026.48.1` or `2026.48.1-beta` |
+| Branch `release/2026.48.1` | `2026.48.1-rc.842.1` |
+| Branch `release/2026.48.1-MH-test` | `2026.48.1-MH-test.842.1` |
+| Pull request 3015 | `0.0.0-pr.3015.842.1` |
+| Other branch, including a manual feature build | `0.0.0-ci.842.1` |
+
+GitHub numbers runs per caller workflow. Retries increment the attempt.
+Tags retain their version on retries. Numeric week and sequence fields are
+normalized (`2026.01.01` becomes `2026.1.1`). Only stable tags update
+the Docker `latest` tag. Self-hosted runners need `pwsh` on the runner account's PATH.
+
 ## Docker image smoke tests
 
 `docker.yml` accepts an optional `docker_smoke_test_command` (Bash). The command runs

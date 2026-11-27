@@ -47,61 +47,9 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Install GitVersion
-      uses: gittools/actions/gitversion/setup@v4.2.0
-      with:
-        versionSpec: '6.x'
-
-    - name: Download GitVersion config (force real curl)
-      run: |
-        C:\Windows\System32\curl.exe -L https://raw.githubusercontent.com/nowastelogistics/procedures/master/GitVersionConfig.yml -o GitVersionConfig.yml
-
-    - name: Determine Version
-      id: gitversion
-      uses: gittools/actions/gitversion/execute@v4.2.0
-      with:
-        useConfigFile: true
-        configFilePath: GitVersionConfig.yml
-        additionalArguments: '/diag /nocache' 
-        
-    - name: Build custom version (Windows / cmd)
-      shell: cmd
-      run: |
-        @echo off
-        setlocal enabledelayedexpansion
-
-        rem === Extract GitVersion outputs ===
-        set major=${{ steps.gitversion.outputs.major }}
-        set minor=${{ steps.gitversion.outputs.minor }}
-        set patch=${{ steps.gitversion.outputs.patch }}
-        set label=${{ steps.gitversion.outputs.preReleaseLabel }}
-        set number=${{ steps.gitversion.outputs.preReleaseNumber }}
-        if "%number%"=="" set number=${{ steps.gitversion.outputs.commitsSinceVersionSource }}
-
-        rem === If label is empty and we are on a release/* branch, force rc ===
-        set branch=%GITHUB_REF_NAME%
-        echo Branch is %branch%
-        echo Label before check: %label%
-        echo Number before check: %number%
-        echo.
-        echo.
-
-        rem === Zero-pad to 5 digits ===
-        set padded=00000%number%
-        set padded=%padded:~-5%
-
-        rem === Build version string ===
-        if "%label%"=="" (
-          set version=%major%.%minor%.%patch%
-        ) else (
-          set version=%major%.%minor%.%patch%-%label%%padded%
-        )
-
-        echo Computed version: %version%
-
-        rem === Export to GITHUB_ENV ===
-        echo GITVERSION=%version%>> %GITHUB_ENV%
-
+    - name: Calculate CI version
+      id: version
+      uses: nowastelogistics/procedures/.github/actions/ci-version@ba59c9bf9c12fa3afa7feb2f60c15abb1b6c5ecb
 
     - name: Setup .NET Core SDK
       uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -150,7 +98,7 @@ jobs:
 
     - name: Build & Pack
       run: |
-        dotnet publish ${{ inputs.project_file_path }} -p:Version=${{ env.GITVERSION }} --configuration Release --output build --arch x64
+        dotnet publish ${{ inputs.project_file_path }} -p:Version=${{ steps.version.outputs.version }} --configuration Release --output build --arch x64
         mv nomad/${{ inputs.project_name }}.* build/
 
     - name: Determine Octopus release branch
@@ -244,7 +192,7 @@ jobs:
             [System.IO.File]::WriteAllText($buildInformationFile, $json, [System.Text.UTF8Encoding]::new($false))
             octopus login --server $env:OCTOPUS_SERVER --api-key $env:OCTOPUS_API_KEY
             if ($LASTEXITCODE -ne 0) { throw 'Octopus login failed.' }
-            octopus build-information upload --space 'Spaces-1' --package-id $env:PACKAGE_ID --version $env:GITVERSION --file $buildInformationFile --overwrite-mode ignore --no-prompt
+            octopus build-information upload --space 'Spaces-1' --package-id $env:PACKAGE_ID --version ${{ steps.version.outputs.version }} --file $buildInformationFile --overwrite-mode ignore --no-prompt
             if ($LASTEXITCODE -ne 0) { throw 'Octopus build information upload failed.' }
         } finally {
             if (Test-Path -LiteralPath $buildInformationFile) {
@@ -256,9 +204,9 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/') || startsWith(github.ref, 'refs/heads/release')
       run: |
         octopus login --server "${{ secrets.octopus_server_url }}" --api-key "${{ secrets.octopus_server_apikey }}"
-        octopus package zip create --id "${{ inputs.project_name }}" --version "${{ env.GITVERSION }}" --base-path "build" --include="**"
-        octopus package upload --space "Spaces-1" --package "${{ inputs.project_name }}.${{ env.GITVERSION }}.zip"
-        octopus release create --space "Spaces-1" --project "${{ inputs.project_name }}" --version "${{ env.GITVERSION }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.project_name }}:${{ env.GITVERSION }}"
+        octopus package zip create --id "${{ inputs.project_name }}" --version "${{ steps.version.outputs.version }}" --base-path "build" --include="**"
+        octopus package upload --space "Spaces-1" --package "${{ inputs.project_name }}.${{ steps.version.outputs.version }}.zip"
+        octopus release create --space "Spaces-1" --project "${{ inputs.project_name }}" --version "${{ steps.version.outputs.version }}" --channel "${{ steps.octopus-channel.outputs.channel }}" --releaseNotes "${{ steps.octopus-channel.outputs.notes }}" --package "${{ inputs.project_name }}:${{ steps.version.outputs.version }}"
 
         if ("${{ steps.octopus-channel.outputs.autorelease }}" -eq "true") {
             $project = "${{ inputs.project_name }}"
@@ -271,9 +219,9 @@ jobs:
             $tenantArgs = @(($tenantsJson | Out-String | ConvertFrom-Json) |
                 Where-Object { -not $_.IsDisabled -and ($_.ProjectEnvironments | Where-Object { $_.Project.Id -ceq $projectId -and $_.Environments.Name -ccontains "Development" }) } |
                 ForEach-Object { "--tenant"; $_.Name })
-            octopus release deploy --space "Spaces-1" --project $project --version "${{ env.GITVERSION }}" --environment "Development" @tenantArgs --no-prompt
+            octopus release deploy --space "Spaces-1" --project $project --version "${{ steps.version.outputs.version }}" --environment "Development" @tenantArgs --no-prompt
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         }
 
         "### Octopus release" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
-        "Pushed new release of docker container **${{ inputs.project_name }}** version **$env:GitVersion_NuGetVersionV2** to Octopus" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
+        "Pushed new release of docker container **${{ inputs.project_name }}** version **${{ steps.version.outputs.version }}** to Octopus" | Out-File -Append -FilePath $env:GITHUB_STEP_SUMMARY
